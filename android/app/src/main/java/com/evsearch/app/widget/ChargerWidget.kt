@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
@@ -33,6 +34,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.evsearch.app.MainActivity
+import com.evsearch.app.R
 import com.evsearch.app.data.local.AppDatabase
 import com.evsearch.app.data.local.SavedChargerEntity
 import com.evsearch.app.data.model.ChargerStatus
@@ -69,9 +71,7 @@ class ChargerWidget : GlanceAppWidget() {
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .background(
-                    ColorProvider(day = Color(0xFF0F172A), night = Color(0xFF0F172A))
-                )
+                .background(ImageProvider(R.drawable.bg_widget_rounded))
                 .clickable(actionStartActivity(componentName))
         ) {
             when {
@@ -127,7 +127,7 @@ class ChargerWidget : GlanceAppWidget() {
                 Row(
                     modifier = GlanceModifier
                         .defaultWeight()
-                        .background(ColorProvider(day = Color(0xFF1E293B), night = Color(0xFF1E293B)))
+                        .background(ImageProvider(R.drawable.bg_widget_card_rounded))
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -216,7 +216,7 @@ class ChargerWidget : GlanceAppWidget() {
                         modifier = GlanceModifier
                             .defaultWeight()
                             .fillMaxSize()
-                            .background(ColorProvider(day = Color(0xFF1E293B), night = Color(0xFF1E293B)))
+                            .background(ImageProvider(R.drawable.bg_widget_card_rounded))
                             .padding(8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalAlignment = Alignment.CenterVertically
@@ -247,7 +247,7 @@ class ChargerWidget : GlanceAppWidget() {
                         // Status Badge Pill
                         Row(
                             modifier = GlanceModifier
-                                .background(ColorProvider(day = statusColor.copy(alpha = 0.2f), night = statusColor.copy(alpha = 0.2f)))
+                                .background(ImageProvider(R.drawable.bg_widget_pill_rounded))
                                 .padding(horizontal = 8.dp, vertical = 3.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -357,7 +357,7 @@ class ChargerWidget : GlanceAppWidget() {
                             modifier = GlanceModifier
                                 .defaultWeight()
                                 .fillMaxSize()
-                                .background(ColorProvider(day = Color(0xFF1E293B), night = Color(0xFF1E293B)))
+                                .background(ImageProvider(R.drawable.bg_widget_card_rounded))
                                 .padding(8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalAlignment = Alignment.CenterVertically
@@ -388,7 +388,7 @@ class ChargerWidget : GlanceAppWidget() {
                             // Status Badge Pill
                             Row(
                                 modifier = GlanceModifier
-                                    .background(ColorProvider(day = statusColor.copy(alpha = 0.2f), night = statusColor.copy(alpha = 0.2f)))
+                                    .background(ImageProvider(R.drawable.bg_widget_pill_rounded))
                                     .padding(horizontal = 8.dp, vertical = 3.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
