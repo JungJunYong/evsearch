@@ -57,7 +57,7 @@ export async function getKepcoInstallStatus(
   console.log(`[KEPCO] Fetching install status: ${url.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) throw new Error(`KEPCO Install API HTTP ${res.status}`);
     const json = await res.json() as { data?: RawKepcoInstallItem[] };
     const items = json.data || [];
@@ -65,7 +65,7 @@ export async function getKepcoInstallStatus(
     console.log(`[KEPCO] Install status: ${items.length} items cached`);
     return items;
   } catch (err) {
-    console.error('[KEPCO] Install status fetch failed:', err);
+    console.error('[KEPCO] Install status fetch failed/timeout:', err);
     return [];
   }
 }
@@ -95,7 +95,7 @@ export async function getKepcoManageStatus(
   console.log(`[KEPCO] Fetching manage status: ${url.replace(/apiKey=[^&]+/, 'apiKey=***')}`);
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) throw new Error(`KEPCO Manage API HTTP ${res.status}`);
     const json = await res.json() as { data?: RawKepcoManageItem[] };
     const items = json.data || [];

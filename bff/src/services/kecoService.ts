@@ -108,12 +108,17 @@ async function fetchRawChargerInfo(paramsInput: {
   const url = `${BASE_URL}?serviceKey=${API_KEY}&${searchParams.toString()}`;
   console.log(`[KECO API LIVE CALL] ${url}`);
 
-  const res = await fetch(url);
-  const data = (await res.json()) as RawKecoApiResponse;
-  const items = data?.items?.item;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const data = (await res.json()) as RawKecoApiResponse;
+    const items = data?.items?.item;
 
-  if (!items) return [];
-  return Array.isArray(items) ? items : [items];
+    if (!items) return [];
+    return Array.isArray(items) ? items : [items];
+  } catch (err) {
+    console.warn('[KECO API FETCH FAILED/TIMEOUT]:', err);
+    return [];
+  }
 }
 
 export async function getStations(
