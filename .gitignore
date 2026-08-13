@@ -1,0 +1,33 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Android
+android/.gradle
+android/build
+android/app/build
+android/local.properties
+android/app/debug
+android/app/release
+*.iml
+.idea/
+
+# Node / BFF
+bff/node_modules
+bff/dist
+bff/.env
+
+# Environment
+.env
+
+# Logs
+log/
+
+# Screenshots (non-essential artifacts)
+*.png
+!docs/**/*.png
+!android/app/src/**/*.png
+
+# Temp
+.tmp/
+.temp/

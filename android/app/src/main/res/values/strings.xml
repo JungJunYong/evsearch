@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">EV 충전소 알리미</string>
+    <string name="widget_name">EV 충전기 상태 위젯</string>
+</resources>

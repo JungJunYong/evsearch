@@ -1,0 +1,25 @@
+services:
+  bff:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: evsearch-bff
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      # KECO OpenAPI encoded service key (live API 사용 시 필수)
+      ENCODED_SERVICE_KEY: ${ENCODED_SERVICE_KEY:-}
+      # true 이면 KECO 실시간 API 호출, 아니면 mock 데이터 fallback
+      USE_LIVE_API: ${USE_LIVE_API:-false}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:4000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
