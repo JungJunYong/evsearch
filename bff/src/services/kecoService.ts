@@ -17,10 +17,36 @@ import {
   RawKecoApiResponse,
 } from '../types/ev.js';
 
-// 충전소 목록 캐시: stations 데이터는 5분(TTL 300초)
-// 충전기 실시간 상태 캐시: 상태 조회는 2분(TTL 120초)
-const stationsCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
-const statusCache = new NodeCache({ stdTTL: 120, checkperiod: 30 });
+// 충전소 목록 캐시: stations 데이터는 10분(TTL 600초)
+// 충전기 실시간 상태 캐시: 상태 조회는 3분(TTL 180초)
+const stationsCache = new NodeCache({ stdTTL: 600, checkperiod: 60 });
+const statusCache = new NodeCache({ stdTTL: 180, checkperiod: 30 });
+
+/**
+ * Warm up nationwide stations in server cache & start periodic background auto-refresh
+ */
+export async function initServerCacheWarmup(): Promise<void> {
+  console.log('🚀 [BFF Server Warmup] Pre-caching nationwide stations into memory...');
+  try {
+    const stations = await getStations(undefined, undefined, 1, 3000);
+    console.log(`✅ [BFF Server Warmup] Nationwide station cache warm up complete! (${stations.length} stations ready)`);
+  } catch (err) {
+    console.warn('⚠️ [BFF Server Warmup] Pre-caching failed:', err);
+  }
+
+  // Background auto-refresh every 4 minutes (keep 100% cache hit rate for all users)
+  setInterval(async () => {
+    try {
+      console.log('🔄 [BFF Background Refresh] Updating nationwide station cache in background...');
+      // Force refresh by flushing stations cache
+      stationsCache.flushAll();
+      const stations = await getStations(undefined, undefined, 1, 3000);
+      console.log(`✅ [BFF Background Refresh] Updated ${stations.length} stations in cache.`);
+    } catch (err) {
+      console.warn('⚠️ [BFF Background Refresh] Background update failed:', err);
+    }
+  }, 4 * 60 * 1000);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

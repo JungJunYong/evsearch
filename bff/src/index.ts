@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { stationRouter } from './routes/stationRoutes.js';
+import { initServerCacheWarmup } from './services/kecoService.js';
 
 // Load .env from root or bff directory
 const __filename = fileURLToPath(import.meta.url);
@@ -43,4 +44,6 @@ app.use('/v1/stations', apiKeyAuthMiddleware, stationRouter);
 
 app.listen(PORT, () => {
   console.log(`⚡ EV Search BFF API Server running on http://localhost:${PORT}`);
+  // Start server cache warmup and periodic background refresh
+  initServerCacheWarmup();
 });
