@@ -6,8 +6,7 @@ services:
     container_name: evsearch-bff
     restart: unless-stopped
     env_file:
-      - path: ../.env
-        required: false
+      - ../.env
     ports:
       - "8084:8084"
     environment:
