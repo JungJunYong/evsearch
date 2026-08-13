@@ -1,0 +1,27 @@
+# Build output
+bff/dist
+
+# Node
+bff/node_modules
+*/node_modules
+
+# Android build artifacts
+android/.gradle
+android/build
+android/app/build
+android/app/debug
+android/app/release
+
+# Git / OS
+.git
+.gitignore
+.DS_Store
+
+# Local env
+.env
+
+# Logs
+log/
+
+# Docs screenshots (not needed in container)
+*.png
