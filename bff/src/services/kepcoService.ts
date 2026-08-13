@@ -132,7 +132,13 @@ export function enrichWithKepcoInstall(
   stations: ChargerStation[],
   installList: RawKepcoInstallItem[]
 ): ChargerStation[] {
+  if (installList.length === 0) return stations;
   return stations.map((station) => {
+    const isKepco = station.operatorName?.includes('한전') ||
+                    station.operatorName?.includes('한국전력') ||
+                    station.operatorName?.includes('KEPCO');
+    if (!isKepco) return station;
+
     const match = installList.find((item) => {
       const a1 = station.address.replace(/\s+/g, '');
       const a2 = item.stnAddr.replace(/\s+/g, '');
@@ -153,13 +159,18 @@ export function enrichWithKepcoInstall(
 
 /**
  * 한전 운영정보로 충전기 상태를 최신화.
- * 주소 기반으로 찾은 충전소의 각 충전기에 KEPCO 실시간 상태를 덮어쓴다.
+ * 한전(한국전력) 충전소에만 한전 실시간 상태를 덮어쓴다.
  */
 export function enrichWithKepcoManage(
   stations: ChargerStation[],
   manageList: RawKepcoManageItem[]
 ): ChargerStation[] {
+  if (manageList.length === 0) return stations;
   return stations.map((station) => {
+    const isKepco = station.operatorName?.includes('한전') ||
+                    station.operatorName?.includes('한국전력') ||
+                    station.operatorName?.includes('KEPCO');
+    if (!isKepco) return station;
     const stationMatch = manageList.find((item) => {
       const a1 = station.address.replace(/\s+/g, '');
       const a2 = item.addr.replace(/\s+/g, '');

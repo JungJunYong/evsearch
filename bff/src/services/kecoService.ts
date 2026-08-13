@@ -173,8 +173,12 @@ export async function getStations(
     });
     let stations = groupItemsByStation(rawItems);
 
-    // KEPCO 병합 (라이브 모드)
-    if (kepcoKey) {
+    // KEPCO 병합 (목록에 한전 충전소가 1개 이상 존재할 때만 핀포인트 호출)
+    const hasKepcoStation = stations.some(
+      (s) => s.operatorName?.includes('한전') || s.operatorName?.includes('한국전력') || s.operatorName?.includes('KEPCO')
+    );
+
+    if (kepcoKey && hasKepcoStation) {
       try {
         const regionCode = mapZcodeToMetro(zcode);
         const [installList, manageList] = await Promise.all([
@@ -183,7 +187,7 @@ export async function getStations(
         ]);
         stations = enrichWithKepcoInstall(stations, installList);
         stations = enrichWithKepcoManage(stations, manageList);
-        console.log(`[BFF KEPCO] Enriched live stations with KEPCO data`);
+        console.log(`[BFF KEPCO] Enriched KEPCO stations`);
       } catch (err) {
         console.warn('[BFF KEPCO] Enrichment failed in live mode:', err);
       }
