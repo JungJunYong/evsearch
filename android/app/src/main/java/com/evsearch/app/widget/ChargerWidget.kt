@@ -122,8 +122,7 @@ class ChargerWidget : GlanceAppWidget() {
 
                 val statusEnum = ChargerStatus.fromString(charger.status)
                 val statusColor = getStatusColor(statusEnum)
-                val shortName = charger.customName
-                    ?: charger.stationName.replace("서울특별시", "서울").replace("강원특별자치도", "강원").take(5)
+                val shortName = formatCleanName(charger.stationName, charger.customName)
 
                 Row(
                     modifier = GlanceModifier
@@ -210,8 +209,7 @@ class ChargerWidget : GlanceAppWidget() {
 
                     val statusEnum = ChargerStatus.fromString(charger.status)
                     val statusColor = getStatusColor(statusEnum)
-                    val displayName = charger.customName
-                        ?: charger.stationName.replace("서울특별시", "서울").replace("특별자치도", "").take(6)
+                    val displayName = formatCleanName(charger.stationName, charger.customName)
                     val spec = "#${charger.chgerId} · ${charger.outputKw ?: "7"}kW"
 
                     Column(
@@ -352,9 +350,8 @@ class ChargerWidget : GlanceAppWidget() {
 
                         val statusEnum = ChargerStatus.fromString(charger.status)
                         val statusColor = getStatusColor(statusEnum)
-                        val displayName = charger.customName
-                            ?: charger.stationName.replace("서울특별시", "서울").replace("특별자치도", "").take(7)
-                        val spec = "#${charger.chgerId} · ${charger.chargerTypeName.take(4)} ${charger.outputKw ?: "7"}kW"
+                        val displayName = formatCleanName(charger.stationName, charger.customName)
+                        val spec = "#${charger.chgerId} · ${charger.chargerTypeName} ${charger.outputKw ?: "7"}kW"
 
                         Column(
                             modifier = GlanceModifier
@@ -565,6 +562,23 @@ class ChargerWidget : GlanceAppWidget() {
             ChargerStatus.UNCONFIRMED -> "미확인"
             ChargerStatus.UNKNOWN -> "미확인"
         }
+    }
+
+    private fun formatCleanName(rawName: String, customName: String?): String {
+        if (!customName.isNullOrBlank()) return customName
+
+        return rawName
+            .replace("서울특별시", "서울")
+            .replace("강원특별자치도", "강원")
+            .replace("전라북도", "전북")
+            .replace("전라남도", "전남")
+            .replace("경상북도", "경북")
+            .replace("경상남도", "경남")
+            .replace("충청북도", "충북")
+            .replace("충청남도", "충남")
+            .replace("특별자치도", "")
+            .replace("광역시", "")
+            .trim()
     }
 
     private fun formatTimeOnly(isoString: String): String {
