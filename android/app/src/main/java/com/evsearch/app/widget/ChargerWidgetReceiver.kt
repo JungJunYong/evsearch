@@ -8,7 +8,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 
-class ChargerWidgetReceiver : GlanceAppWidgetReceiver() {
+open class ChargerWidgetReceiver : GlanceAppWidgetReceiver() {
 
     override val glanceAppWidget: GlanceAppWidget = ChargerWidget()
 
@@ -30,5 +30,29 @@ class ChargerWidgetReceiver : GlanceAppWidgetReceiver() {
                 workRequest
             )
         }
+    }
+}
+
+class ChargerWidget4x1Receiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = ChargerWidget()
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        ChargerWidgetReceiver.scheduleBackgroundWork(context)
+    }
+}
+
+class ChargerWidget4x2Receiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = ChargerWidget()
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        ChargerWidgetReceiver.scheduleBackgroundWork(context)
+    }
+}
+
+class ChargerWidget4x3Receiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = ChargerWidget()
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        ChargerWidgetReceiver.scheduleBackgroundWork(context)
     }
 }

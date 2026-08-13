@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">EV 충전소 알리미</string>
-    <string name="widget_name">EV 충전기 상태 위젯</string>
+    <string name="widget_name">EV 충전소 위젯</string>
+    <string name="widget_name_4x1">EV 충전소 소형 (4x1)</string>
+    <string name="widget_name_4x2">EV 충전소 중형 (4x2)</string>
+    <string name="widget_name_4x3">EV 충전소 대형 (4x3)</string>
 </resources>
