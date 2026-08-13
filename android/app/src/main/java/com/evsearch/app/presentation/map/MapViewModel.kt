@@ -26,21 +26,46 @@ class MapViewModel(
     private val _uiState = MutableStateFlow(MapUiState())
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
 
+    // Client-side Memory Cache for Instant Region Switching & Map Browsing (0ms delay)
+    private var nationwideMasterCache: List<ChargerStation>? = null
+    private val regionCacheMap = mutableMapOf<String, List<ChargerStation>>()
+
     init {
         loadStations("all", "전국")
     }
 
     fun loadStations(zcode: String = "all", zcodeName: String = "전국") {
         viewModelScope.launch {
+            // 1. Instant Cache Hit Check (0ms UI latency)
+            val cachedStations = getCachedStations(zcode)
+            if (cachedStations != null && cachedStations.isNotEmpty()) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    selectedZcode = zcode,
+                    selectedZcodeName = zcodeName,
+                    stations = cachedStations,
+                    errorMessage = null
+                )
+                return@launch
+            }
+
+            // 2. Fetch from API only if not cached in memory
             _uiState.value = _uiState.value.copy(
-                isLoading = true,
+                isLoading = _uiState.value.stations.isEmpty(), // Only set loading if no stations displayed
                 selectedZcode = zcode,
                 selectedZcodeName = zcodeName,
                 errorMessage = null
             )
+
             val targetZcode = if (zcode == "all") null else zcode
             val result = repository.getStations(zcode = targetZcode)
             result.onSuccess { stations ->
+                if (zcode == "all" || targetZcode == null) {
+                    nationwideMasterCache = stations
+                } else {
+                    regionCacheMap[zcode] = stations
+                }
+
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     stations = stations
@@ -48,10 +73,21 @@ class MapViewModel(
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    errorMessage = error.message ?: "충전소 정보를 불러오는데 실패했습니다."
+                    errorMessage = if (_uiState.value.stations.isEmpty()) error.message else null
                 )
             }
         }
+    }
+
+    private fun getCachedStations(zcode: String): List<ChargerStation>? {
+        if (zcode == "all" || zcode.isBlank()) {
+            return nationwideMasterCache
+        }
+        val master = nationwideMasterCache
+        if (master != null && master.isNotEmpty()) {
+            return master.filter { it.zcode == zcode }
+        }
+        return regionCacheMap[zcode]
     }
 
     fun selectStation(station: ChargerStation?) {

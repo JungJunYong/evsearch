@@ -384,18 +384,18 @@ fun MapScreen(
                     }
                 }
 
-                if (uiState.isLoading) {
+                if (uiState.isLoading && uiState.stations.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.5f)),
+                            .background(Color(0xFF0B0D14).copy(alpha = 0.7f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "충전소 데이터를 동기화하는 중...",
+                                text = "전국 충전소 동기화 중...",
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
