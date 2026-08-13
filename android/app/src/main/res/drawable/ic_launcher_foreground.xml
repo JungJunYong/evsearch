@@ -4,28 +4,42 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- One UI 9.0 Squircle Background (26dp radius) -->
+    <!-- Perfectly Round Circular Outer Badge (동글동글한 원형 뱃지) -->
     <path
-        android:fillColor="#10B981"
-        android:pathData="M28,12 L80,12 Q96,12 96,28 L96,80 Q96,96 80,96 L28,96 Q12,96 12,80 L12,28 Q12,12 28,12 Z" />
+        android:fillColor="#00C896"
+        android:pathData="M 54, 12 A 42,42 0 1,0 54,96 A 42,42 0 1,0 54,12 Z" />
 
-    <!-- Inner radial glow (subtle depth) -->
+    <!-- Inner Soft Glowing Circle Layer -->
     <path
         android:fillColor="#14D9A3"
-        android:pathData="M28,12 L80,12 Q96,12 96,28 L96,54 Q72,66 54,66 Q36,66 12,54 L12,28 Q12,12 28,12 Z" />
+        android:pathData="M 54, 16 A 38,38 0 1,0 54,92 A 38,38 0 1,0 54,16 Z" />
 
-    <!-- White lightning bolt (sharp, modern) -->
+    <!-- Circular Inner Gradient Ring -->
+    <path
+        android:fillColor="#059669"
+        android:pathData="M 54, 22 A 32,32 0 1,0 54,86 A 32,32 0 1,0 54,22 Z" />
+
+    <!-- Bright Central Core Circle -->
+    <path
+        android:fillColor="#047857"
+        android:pathData="M 54, 26 A 28,28 0 1,0 54,82 A 28,28 0 1,0 54,26 Z" />
+
+    <!-- Sleek Bold Lightning Bolt (EV Charger) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M59,24 L41,54 L53,54 L49,84 L71,50 L57,50 L61,24 Z" />
+        android:pathData="M 57,26 L 40,54 L 52,54 L 46,82 L 68,48 L 54,48 Z" />
 
-    <!-- Small inner shadow/highlight on bolt for depth -->
+    <!-- Shiny Inner Highlight Sparkle -->
     <path
         android:fillColor="#E8FDF7"
-        android:pathData="M59,24 L41,54 L48,54 L60,32 Z" />
+        android:pathData="M 57,26 L 40,54 L 47,54 L 58,32 Z" />
 
-    <!-- Tiny spark accent (top-right of bolt) -->
+    <!-- Round Spark Dots (동글동글한 장식 도트) -->
     <path
         android:fillColor="#A7F3D0"
-        android:pathData="M76,20 L79,27 L86,30 L79,33 L76,40 L73,33 L66,30 L73,27 Z" />
+        android:pathData="M 75, 25 A 3,3 0 1,0 75,31 A 3,3 0 1,0 75,25 Z" />
+
+    <path
+        android:fillColor="#A7F3D0"
+        android:pathData="M 33, 75 A 2.5,2.5 0 1,0 33,80 A 2.5,2.5 0 1,0 33,75 Z" />
 </vector>
