@@ -19,10 +19,10 @@ interface BffApiService {
 
     @GET("v1/stations")
     suspend fun getStations(
-        @Query("zcode") zcode: String? = "11",
+        @Query("zcode") zcode: String? = null,
         @Query("zscode") zscode: String? = null,
         @Query("page") page: Int = 1,
-        @Query("numOfRows") numOfRows: Int = 50
+        @Query("numOfRows") numOfRows: Int = 3000
     ): BffStationsResponse
 
     @GET("v1/stations/{statId}")

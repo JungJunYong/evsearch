@@ -62,6 +62,7 @@ import com.evsearch.app.presentation.map.components.KakaoMapView
 data class RegionCode(val code: String, val name: String, val lat: Double, val lng: Double)
 
 val REGION_CODES = listOf(
+    RegionCode("all", "전국", 37.5665, 126.9780),
     RegionCode("11", "서울", 37.5665, 126.9780),
     RegionCode("41", "경기", 37.2750, 127.0094),
     RegionCode("28", "인천", 37.4563, 126.7052),

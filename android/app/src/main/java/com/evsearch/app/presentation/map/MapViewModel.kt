@@ -12,8 +12,8 @@ import kotlinx.coroutines.launch
 
 data class MapUiState(
     val isLoading: Boolean = false,
-    val selectedZcode: String = "11", // Default: Seoul
-    val selectedZcodeName: String = "서울특별시",
+    val selectedZcode: String = "all", // Default: Nationwide (전국)
+    val selectedZcodeName: String = "전국",
     val stations: List<ChargerStation> = emptyList(),
     val errorMessage: String? = null,
     val selectedStation: ChargerStation? = null
@@ -27,10 +27,10 @@ class MapViewModel(
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
 
     init {
-        loadStations("11", "서울특별시")
+        loadStations("all", "전국")
     }
 
-    fun loadStations(zcode: String, zcodeName: String) {
+    fun loadStations(zcode: String = "all", zcodeName: String = "전국") {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isLoading = true,
@@ -38,7 +38,8 @@ class MapViewModel(
                 selectedZcodeName = zcodeName,
                 errorMessage = null
             )
-            val result = repository.getStations(zcode = zcode)
+            val targetZcode = if (zcode == "all") null else zcode
+            val result = repository.getStations(zcode = targetZcode)
             result.onSuccess { stations ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,

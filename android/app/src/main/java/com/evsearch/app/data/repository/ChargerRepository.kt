@@ -50,10 +50,11 @@ class ChargerRepository(
 
     fun getSavedChargersFlow(): Flow<List<SavedChargerEntity>> = savedChargerDao.getAllSavedChargersFlow()
 
-    suspend fun getStations(zcode: String? = "11", zscode: String? = null): Result<List<ChargerStation>> {
+    suspend fun getStations(zcode: String? = null, zscode: String? = null): Result<List<ChargerStation>> {
         // First attempt online API call
         try {
-            val response = apiService.getStations(zcode = zcode, zscode = zscode)
+            val targetZcode = if (zcode == "all") null else zcode
+            val response = apiService.getStations(zcode = targetZcode, zscode = zscode)
             if (response.success && response.data.isNotEmpty()) {
                 return Result.success(response.data)
             }
