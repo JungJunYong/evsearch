@@ -122,7 +122,7 @@ export async function getStations(
   pageNo = 1,
   numOfRows = 3000
 ): Promise<ChargerStation[]> {
-  const useLiveApi = process.env.USE_LIVE_API === 'true';
+  const useLiveApi = process.env.USE_LIVE_API !== 'false';
   const kepcoKey = process.env.KEPCO_API_KEY || '';
 
   if (!useLiveApi) {
@@ -146,8 +146,7 @@ export async function getStations(
     }
 
     if (zcode) {
-      const filtered = mockList.filter((s) => s.zcode === zcode || !s.zcode);
-      return filtered.length > 0 ? filtered : mockList;
+      return mockList.filter((s) => s.zcode === zcode);
     }
     return mockList;
   }
