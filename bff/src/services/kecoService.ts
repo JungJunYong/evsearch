@@ -192,13 +192,20 @@ export async function getStations(
   }
 }
 
-export async function getStationDetail(statId: string, zcode = '11'): Promise<ChargerStation | null> {
-  const allStations = await getStations(zcode);
-  const found = allStations.find((s) => s.statId === statId);
-  if (found) return found;
+export async function getStationDetail(statId: string, zcode?: string): Promise<ChargerStation | null> {
+  if (zcode) {
+    const regional = await getStations(zcode);
+    const foundRegional = regional.find((s) => s.statId === statId);
+    if (foundRegional) return foundRegional;
+  }
+
+  // Fast search in nationwide pre-cached stations (0ms delay)
+  const nationwide = await getStations(undefined);
+  const foundNationwide = nationwide.find((s) => s.statId === statId);
+  if (foundNationwide) return foundNationwide;
 
   const fallbackAll = loadLocalMockStations();
-  return fallbackAll.find((s) => s.statId === statId) || fallbackAll[0] || null;
+  return fallbackAll.find((s) => s.statId === statId) || null;
 }
 
 export async function getChargerBatchStatus(keys: Array<{ statId: string; chgerId: string }>) {

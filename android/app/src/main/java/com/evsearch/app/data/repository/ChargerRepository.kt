@@ -50,12 +50,23 @@ class ChargerRepository(
 
     fun getSavedChargersFlow(): Flow<List<SavedChargerEntity>> = savedChargerDao.getAllSavedChargersFlow()
 
+    private var inMemoryStationCache: Map<String, ChargerStation> = emptyMap()
+
+    fun cacheStationsInMemory(stations: List<ChargerStation>) {
+        if (stations.isNotEmpty()) {
+            val map = inMemoryStationCache.toMutableMap()
+            stations.forEach { map[it.statId] = it }
+            inMemoryStationCache = map
+        }
+    }
+
     suspend fun getStations(zcode: String? = null, zscode: String? = null): Result<List<ChargerStation>> {
         // First attempt online API call
         try {
             val targetZcode = if (zcode == "all") null else zcode
             val response = apiService.getStations(zcode = targetZcode, zscode = zscode)
             if (response.success && response.data.isNotEmpty()) {
+                cacheStationsInMemory(response.data)
                 return Result.success(response.data)
             }
         } catch (e: Exception) {
@@ -69,6 +80,7 @@ class ChargerRepository(
         } else {
             assetList.filter { it.zcode == zcode }
         }
+        cacheStationsInMemory(filtered)
 
         return if (filtered.isNotEmpty()) {
             Result.success(filtered)
@@ -80,22 +92,30 @@ class ChargerRepository(
     }
 
     suspend fun getStationDetail(statId: String): Result<ChargerStation> {
+        // 1. Instant check in memory cache (0ms delay!)
+        inMemoryStationCache[statId]?.let {
+            return Result.success(it)
+        }
+
+        // 2. Instant check in local asset
+        val assetList = loadStationsFromAssets()
+        assetList.find { it.statId == statId }?.let {
+            cacheStationsInMemory(listOf(it))
+            return Result.success(it)
+        }
+
+        // 3. Online API call if not in local cache
         try {
             val response = apiService.getStationDetail(statId)
             if (response.success) {
+                cacheStationsInMemory(listOf(response.data))
                 return Result.success(response.data)
             }
         } catch (e: Exception) {
-            // Fallback to local asset
+            // Fallback
         }
 
-        val assetList = loadStationsFromAssets()
-        val station = assetList.find { it.statId == statId }
-        return if (station != null) {
-            Result.success(station)
-        } else {
-            Result.failure(Exception("Station not found offline"))
-        }
+        return Result.failure(Exception("충전소 정보를 찾을 수 없습니다."))
     }
 
     suspend fun saveChargerToWidget(station: ChargerStation, charger: Charger) {
