@@ -4,6 +4,7 @@ import com.evsearch.app.data.model.BffBatchStatusResponse
 import com.evsearch.app.data.model.BffStationDetailResponse
 import com.evsearch.app.data.model.BffStationsResponse
 import com.evsearch.app.data.model.BatchStatusRequest
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -35,15 +36,26 @@ interface BffApiService {
     ): BffBatchStatusResponse
 
     companion object {
-        // Use 127.0.0.1:4000 (ADB reverse forwarded over USB)
-        private const val BASE_URL = "http://127.0.0.1:4000/"
+        // Production Live API Server (evsearch.wiqio.com)
+        private const val BASE_URL = "https://evsearch.wiqio.com/"
+        private const val API_KEY_HEADER_NAME = "X-API-Key"
+        private const val API_KEY_HEADER_VALUE = "evsearch-sec-2026-v1-key"
 
         fun create(baseUrl: String = BASE_URL): BffApiService {
             val logger = HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BODY
             }
 
+            val authInterceptor = Interceptor { chain ->
+                val originalRequest = chain.request()
+                val authenticatedRequest = originalRequest.newBuilder()
+                    .addHeader(API_KEY_HEADER_NAME, API_KEY_HEADER_VALUE)
+                    .build()
+                chain.proceed(authenticatedRequest)
+            }
+
             val client = OkHttpClient.Builder()
+                .addInterceptor(authInterceptor)
                 .addInterceptor(logger)
                 .build()
 
