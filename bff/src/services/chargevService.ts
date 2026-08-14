@@ -35,7 +35,7 @@ async function fetchDynamicChargersFromApi(bid: string): Promise<Charger[] | nul
     return json.data.map((c: any) => {
       const cNum = c.c_num || c.cNum || c.charger_no || String(c.chger_id || '');
       const rawCode = cNum || '01';
-      const formattedCode = rawCode.length === 6 && rawCode.startsWith('11050') ? `11050 ${rawCode.slice(5)}` : rawCode;
+      const formattedCode = rawCode.length === 6 ? `${rawCode.slice(0, 5)} ${rawCode.slice(5)}` : rawCode;
       const location = c.location || c.charger_location || c.addr_detail || c.chger_location || undefined;
       const isAvailable = c.charging_status === '0' || c.status === 'AVAILABLE' || c.stat === '2';
       const isCharging = c.charging_status === '1' || c.status === 'CHARGING' || c.stat === '3';
@@ -170,9 +170,9 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
       };
 
       const fallbackChargers: Charger[] = Array.from({ length: numChargers }, (_, i) => {
-        // Physical charger terminal hardware code from live ChargEV API (e.g. 110508 -> formatted as "11050 8")
+        // Physical charger terminal hardware code from live ChargEV API (e.g. 110508 -> formatted as "11050 8", 110543 -> "11054 3")
         const rawCode = isAlfheim ? String(110508 + i) : `11${String(100 + (parseInt(item.es_key) % 800)).padStart(3, '0')}${String(i + 1).padStart(2, '0')}`;
-        const formattedCode = isAlfheim ? `11050 ${8 + i}` : rawCode;
+        const formattedCode = rawCode.length === 6 ? `${rawCode.slice(0, 5)} ${rawCode.slice(5)}` : rawCode;
         const locationDesc = isAlfheim ? ALFHEIM_LOCATION_MAP[rawCode] : undefined;
 
         // Real-time status distribution
