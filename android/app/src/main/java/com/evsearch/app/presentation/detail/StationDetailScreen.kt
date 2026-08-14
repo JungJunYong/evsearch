@@ -335,15 +335,29 @@ fun SamsungOneUIChargerItemCard(
 
                     Spacer(modifier = Modifier.width(12.dp))
 
-                    Column(modifier = Modifier.padding(end = 8.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 8.dp)
+                    ) {
                         Text(
-                            text = "단말기 #${charger.chgerId}",
+                            text = if (!charger.chargerCode.isNullOrBlank()) "충전기 [${charger.chargerCode}]" else "단말기 #${charger.chgerId}",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
+                        charger.location?.let { loc ->
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = "📍 $loc",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF3B82F6)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "${charger.outputKw ?: "50"}kW ${charger.kepcoTypeText}",
+                            text = "${charger.outputKw ?: "7"}kW · ${charger.kepcoTypeText}",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

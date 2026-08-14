@@ -72,10 +72,57 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
 
       const numChargers = isAlfheim ? 36 : (isMegaComplex ? 36 : (isApartment ? 20 : 8));
 
+      const ALFHEIM_LOCATIONS = [
+        '101동 지하 1층 12번 기둥 앞',
+        '103동 지하 1층 EV 전용구역',
+        '105동 지하 1층 주차장 출입구 옆',
+        '107동 지하 1층 엘리베이터 홀 입구',
+        '109동 지하 1층 34번 기둥 뒤',
+        '111동 지하 1층 B존 08번',
+        '113동 지하 1층 계단실 옆',
+        '115동 지하 1층 완속 충전구역',
+        '117동 지하 1층 18번 기둥 앞',
+        '119동 지하 1층 주차장 중앙 통로',
+        '121동 지하 1층 EV 충전존',
+        '123동 지하 1층 북측 출구 방면',
+        '125동 지하 1층 26번 기둥',
+        '127동 지하 1층 38번 기둥',
+        '129동 지하 1층 C구역 05번',
+        '131동 지하 1층 지하통로 입구',
+        '133동 지하 1층 남측 주차장',
+        '135동 지하 1층 14번 기둥 앞',
+        '102동 지하 2층 45번 기둥 앞',
+        '104동 지하 2층 EV 충전존',
+        '106동 지하 2층 주차장 진입로 우측',
+        '108동 지하 2층 22번 기둥 뒤',
+        '110동 지하 2층 무인정산기 부근',
+        '112동 지하 2층 중앙 통로 18번',
+        '114동 지하 2층 D구역 03번',
+        '116동 지하 2층 EV 전용 주차면',
+        '118동 지하 2층 엘리베이터 앞',
+        '120동 지하 2층 31번 기둥 뒤',
+        '122동 지하 2층 지하출구 방면',
+        '124동 지하 2층 52번 기둥 앞',
+        '126동 지하 2층 B존 19번',
+        '128동 지하 2층 남측 통로 07번',
+        '130동 지하 2층 41번 기둥 앞',
+        '132동 지하 2층 EV 충전존 02',
+        '134동 지하 2층 동측 출입구',
+        '136동 지하 2층 15번 기둥 뒤',
+      ];
+
       const chargers: Charger[] = Array.from({ length: numChargers }, (_, i) => {
         const idStr = String(i + 1).padStart(2, '0');
         const half = Math.ceil(numChargers / 2);
-        const floor = i < half ? 'B1' : 'B2';
+        const floor = i < half ? '지하 1층' : '지하 2층';
+        const dongNum = 101 + (i % 12);
+        const pillarNum = 10 + ((i * 3) % 45);
+
+        // Physical charger terminal hardware code (e.g. 11050-8)
+        const chargerCode = isAlfheim ? `11050-${i + 1}` : `11${String(100 + (parseInt(item.es_key) % 800)).padStart(3, '0')}-${i + 1}`;
+        // Detailed physical location description
+        const locationDesc = isAlfheim && ALFHEIM_LOCATIONS[i] ? ALFHEIM_LOCATIONS[i] : `${dongNum}동 ${floor} ${pillarNum}번 기둥 부근`;
+
         // Real-time status distribution (approx 70% available, 25% charging, 5% maintenance)
         const isMaintenance = (i === 13);
         const isCharging = !isMaintenance && (i % 4 === 1 || i % 5 === 2);
@@ -84,9 +131,11 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
 
         return {
           statId,
-          chgerId: idStr,
+          chgerId: chargerCode,
+          chargerCode,
+          location: locationDesc,
           typeCode: '02',
-          typeName: `완속 (${floor}층 ${idStr}호기 · 7kW)`,
+          typeName: `AC완속 (${chargerCode} · 7kW)`,
           outputKw: '7',
           status,
           statusCode,

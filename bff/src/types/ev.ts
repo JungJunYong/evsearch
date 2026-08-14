@@ -66,6 +66,8 @@ export interface Charger {
   lastChargeStartedAt?: string;
   lastChargeEndedAt?: string;
   isDeleted: boolean;
+  location?: string;        // e.g. '105동 지하 1층 주차장 출입구 옆'
+  chargerCode?: string;     // e.g. '11050-8' or physical terminal hardware number
   // KEPCO enriched fields
   chargeTp?: string;    // 1:완속, 2:급속
   cpStat?: string;      // 1:충전가능 2:충전중 3:고장/점검 4:통신장애 5:통신미연결 6:충전종료 7:계획정지

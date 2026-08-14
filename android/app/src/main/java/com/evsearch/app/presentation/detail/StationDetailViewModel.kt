@@ -59,16 +59,17 @@ class StationDetailViewModel(
     fun toggleWidgetRegistration(charger: Charger) {
         val station = _uiState.value.station ?: return
         val key = "${station.statId}:${charger.chgerId}"
+        val displayName = charger.chargerCode ?: charger.chgerId
         viewModelScope.launch {
             if (_uiState.value.savedChargerKeys.contains(key)) {
                 repository.removeChargerFromWidget(key)
                 _uiState.value = _uiState.value.copy(
-                    widgetSavedSuccessMessage = "단말기 #${charger.chgerId} 위젯 등록이 해제되었습니다."
+                    widgetSavedSuccessMessage = "충전기 [${displayName}] 위젯 등록이 해제되었습니다."
                 )
             } else {
                 repository.saveChargerToWidget(station, charger)
                 _uiState.value = _uiState.value.copy(
-                    widgetSavedSuccessMessage = "단말기 #${charger.chgerId} 번이 홈 화면 위젯에 등록되었습니다!"
+                    widgetSavedSuccessMessage = "충전기 [${displayName}] 번이 홈 화면 위젯에 등록되었습니다!"
                 )
             }
         }

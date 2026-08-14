@@ -332,8 +332,9 @@ private fun OneUI9SavedChargerCard(
                         .padding(end = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val displayCode = charger.chgerId
                     Text(
-                        text = "단말기 #${charger.chgerId} · ${charger.chargerTypeName}${charger.outputKw?.let { " ${it}kW" } ?: ""}",
+                        text = "충전기 [${displayCode}] · ${charger.chargerTypeName}${charger.outputKw?.let { " ${it}kW" } ?: ""}",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

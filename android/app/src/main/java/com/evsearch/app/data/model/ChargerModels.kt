@@ -36,6 +36,8 @@ data class Charger(
     val lastChargeStartedAt: String?,
     val lastChargeEndedAt: String?,
     val isDeleted: Boolean,
+    val location: String? = null,
+    val chargerCode: String? = null,
     // KEPCO enriched fields
     val chargeTp: String? = null,    // "1" 완속, "2" 급속
     val cpStat: String? = null,      // "1" 가능, "2" 충전중, "3" 고장/점검, "4" 통신장애, "5" 미연결, "6" 종료, "7" 계획정지
