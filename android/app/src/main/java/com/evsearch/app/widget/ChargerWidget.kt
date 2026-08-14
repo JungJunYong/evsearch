@@ -219,7 +219,7 @@ class ChargerWidget : GlanceAppWidget() {
                     val statusEnum = ChargerStatus.fromString(charger.status)
                     val statusColor = getStatusColor(statusEnum)
                     val displayName = formatCleanName(charger.stationName, charger.customName)
-                    val spec = "#${charger.chgerId} · ${charger.outputKw ?: "7"}kW"
+                    val spec = if (charger.chgerId.contains("-")) "[${charger.chgerId}]" else "#${charger.chgerId} · ${charger.outputKw ?: "7"}kW"
 
                     Column(
                         modifier = GlanceModifier
