@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
@@ -20,14 +22,25 @@ open class ChargerWidgetReceiver : GlanceAppWidgetReceiver() {
 
     companion object {
         fun scheduleBackgroundWork(context: Context) {
-            val workRequest = PeriodicWorkRequestBuilder<ChargerWidgetWorker>(
+            val workManager = WorkManager.getInstance(context)
+
+            // 1) Trigger immediate one-time sync to populate latest status on home screen right away
+            val immediateWork = OneTimeWorkRequestBuilder<ChargerWidgetWorker>().build()
+            workManager.enqueueUniqueWork(
+                "ChargerWidgetImmediateSync",
+                ExistingWorkPolicy.REPLACE,
+                immediateWork
+            )
+
+            // 2) Schedule recurring 15-minute periodic background refresh
+            val periodicWork = PeriodicWorkRequestBuilder<ChargerWidgetWorker>(
                 15, TimeUnit.MINUTES
             ).build()
 
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            workManager.enqueueUniquePeriodicWork(
                 "ChargerWidgetUpdateWork",
-                ExistingPeriodicWorkPolicy.KEEP,
-                workRequest
+                ExistingPeriodicWorkPolicy.UPDATE,
+                periodicWork
             )
         }
     }

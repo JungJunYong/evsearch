@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.evsearch.app.data.model.ChargerStation
@@ -221,7 +222,15 @@ fun MapScreen(
                     searchQuery = it
                     viewModel.onSearchQueryChanged(it)
                 },
-                placeholder = { Text("충전소 명칭, 아파트명(자이, 래미안 등) 검색", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                placeholder = {
+                    Text(
+                        text = "충전소명, 아파트명, 단말기 번호 검색",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                 trailingIcon = {
                     when {
