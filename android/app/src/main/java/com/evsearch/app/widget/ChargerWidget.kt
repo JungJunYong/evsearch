@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
 import androidx.glance.action.ActionParameters
@@ -85,7 +86,7 @@ class ChargerWidget : GlanceAppWidget() {
         ) {
             when {
                 // 4x1 (Small) - height < 120dp
-                size.height < 120.dp -> Widget4x1(chargers.take(3))
+                size.height < 120.dp -> Widget4x1(chargers.take(2))
                 // 4x2 (Medium) - 120 ~ 210dp
                 size.height < 210.dp -> Widget4x2(chargers.take(4))
                 // 4x3 (Large) - 210dp+
@@ -95,7 +96,7 @@ class ChargerWidget : GlanceAppWidget() {
     }
 
     // ==========================================
-    // 🎨 4x1 WIDGET (Compact Horizontal 3 Items)
+    // 🎨 4x1 WIDGET (Compact Bar 2 Wide Items)
     // ==========================================
     @Composable
     private fun Widget4x1(chargers: List<SavedChargerEntity>) {
@@ -122,7 +123,7 @@ class ChargerWidget : GlanceAppWidget() {
                 )
             }
 
-            Spacer(modifier = GlanceModifier.width(10.dp))
+            Spacer(modifier = GlanceModifier.width(8.dp))
 
             chargers.forEachIndexed { index, charger ->
                 if (index > 0) {
@@ -132,17 +133,18 @@ class ChargerWidget : GlanceAppWidget() {
                 val statusEnum = ChargerStatus.fromString(charger.status)
                 val statusColor = getStatusColor(statusEnum)
                 val shortName = formatCleanName(charger.stationName, charger.customName)
+                val terminalText = if (charger.chgerId.length == 6) "${charger.chgerId.substring(0, 5)} ${charger.chgerId.substring(5)}" else "#${charger.chgerId}"
 
                 Row(
                     modifier = GlanceModifier
                         .defaultWeight()
                         .background(ImageProvider(R.drawable.bg_widget_card_rounded))
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    StatusDot(color = statusColor, sizeDp = 8)
+                    StatusDot(status = statusEnum)
                     Spacer(modifier = GlanceModifier.width(6.dp))
-                    Column {
+                    Column(modifier = GlanceModifier.defaultWeight()) {
                         Text(
                             text = shortName,
                             style = TextStyle(
@@ -152,6 +154,24 @@ class ChargerWidget : GlanceAppWidget() {
                             ),
                             maxLines = 1
                         )
+                        Text(
+                            text = terminalText,
+                            style = TextStyle(
+                                color = ColorProvider(day = Color(0xFF94A3B8), night = Color(0xFF94A3B8)),
+                                fontSize = 9.sp
+                            ),
+                            maxLines = 1
+                        )
+                    }
+
+                    Spacer(modifier = GlanceModifier.width(4.dp))
+
+                    Row(
+                        modifier = GlanceModifier
+                            .background(ImageProvider(R.drawable.bg_widget_pill_rounded))
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             text = getStatusText(statusEnum),
                             style = TextStyle(
@@ -168,14 +188,14 @@ class ChargerWidget : GlanceAppWidget() {
     }
 
     // ==========================================
-    // 🎨 4x2 WIDGET (Medium Grid 3~4 Items)
+    // 🎨 4x2 WIDGET (Samsung One UI 2x2 Grid)
     // ==========================================
     @Composable
     private fun Widget4x2(chargers: List<SavedChargerEntity>) {
         Column(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             // --- Top Header ---
             Row(
@@ -183,7 +203,7 @@ class ChargerWidget : GlanceAppWidget() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "⚡ 실시간 전기차 충전소",
+                    text = "⚡ 실시간 EV 충전소",
                     style = TextStyle(
                         color = ColorProvider(day = Color(0xFF00C896), night = Color(0xFF00C896)),
                         fontSize = 12.sp,
@@ -191,6 +211,7 @@ class ChargerWidget : GlanceAppWidget() {
                     )
                 )
                 Spacer(modifier = GlanceModifier.defaultWeight())
+
                 val availableCount = chargers.count { ChargerStatus.fromString(it.status) == ChargerStatus.AVAILABLE }
                 Text(
                     text = "대기 $availableCount/${chargers.size}",
@@ -200,96 +221,65 @@ class ChargerWidget : GlanceAppWidget() {
                         fontWeight = FontWeight.Medium
                     )
                 )
+
+                Spacer(modifier = GlanceModifier.width(8.dp))
+
+                Text(
+                    text = "🔄 새로고침",
+                    style = TextStyle(
+                        color = ColorProvider(day = Color(0xFF3B82F6), night = Color(0xFF3B82F6)),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    modifier = GlanceModifier.clickable(actionRunCallback<RefreshActionCallback>())
+                )
             }
 
             Spacer(modifier = GlanceModifier.height(8.dp))
 
-            // --- 4-Card Horizontal Row ---
-            Row(
-                modifier = GlanceModifier
-                    .fillMaxWidth()
-                    .defaultWeight(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                chargers.forEachIndexed { index, charger ->
-                    if (index > 0) {
-                        Spacer(modifier = GlanceModifier.width(8.dp))
+            // --- 2x2 Grid (2 Columns x 2 Rows) ---
+            val chunked = chargers.chunked(2)
+            chunked.forEachIndexed { rowIndex, rowList ->
+                if (rowIndex > 0) {
+                    Spacer(modifier = GlanceModifier.height(6.dp))
+                }
+
+                Row(
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .defaultWeight(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    rowList.forEachIndexed { colIndex, charger ->
+                        if (colIndex > 0) {
+                            Spacer(modifier = GlanceModifier.width(8.dp))
+                        }
+
+                        WidgetCardItem(charger = charger, modifier = GlanceModifier.defaultWeight())
                     }
 
-                    val statusEnum = ChargerStatus.fromString(charger.status)
-                    val statusColor = getStatusColor(statusEnum)
-                    val displayName = formatCleanName(charger.stationName, charger.customName)
-                    val spec = if (charger.chgerId.contains("-")) "[${charger.chgerId}]" else "#${charger.chgerId} · ${charger.outputKw ?: "7"}kW"
-
-                    Column(
-                        modifier = GlanceModifier
-                            .defaultWeight()
-                            .fillMaxSize()
-                            .background(ImageProvider(R.drawable.bg_widget_card_rounded))
-                            .padding(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = displayName,
-                            style = TextStyle(
-                                color = ColorProvider(day = Color.White, night = Color.White),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            maxLines = 1
-                        )
-
-                        Spacer(modifier = GlanceModifier.height(2.dp))
-
-                        Text(
-                            text = spec,
-                            style = TextStyle(
-                                color = ColorProvider(day = Color(0xFF94A3B8), night = Color(0xFF94A3B8)),
-                                fontSize = 9.sp
-                            ),
-                            maxLines = 1
-                        )
-
-                        Spacer(modifier = GlanceModifier.height(6.dp))
-
-                        // Status Badge Pill
-                        Row(
-                            modifier = GlanceModifier
-                                .background(ImageProvider(R.drawable.bg_widget_pill_rounded))
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            StatusDot(color = statusColor, sizeDp = 6)
-                            Spacer(modifier = GlanceModifier.width(4.dp))
-                            Text(
-                                text = getStatusText(statusEnum),
-                                style = TextStyle(
-                                    color = ColorProvider(day = statusColor, night = statusColor),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            )
-                        }
+                    // Balance layout if odd count
+                    if (rowList.size == 1) {
+                        Spacer(modifier = GlanceModifier.width(8.dp))
+                        Spacer(modifier = GlanceModifier.defaultWeight())
                     }
                 }
             }
 
             Spacer(modifier = GlanceModifier.height(6.dp))
 
-            // --- Footer with Instant Refresh Action ---
+            // --- Footer ---
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val lastFetched = chargers.firstOrNull()?.lastFetchedAt ?: ""
                 Text(
-                    text = "🔄 ${formatTimeOnly(lastFetched)} 동기화",
+                    text = "${formatTimeOnly(lastFetched)} 동기화",
                     style = TextStyle(
                         color = ColorProvider(day = Color(0xFF64748B), night = Color(0xFF64748B)),
                         fontSize = 9.sp
-                    ),
-                    modifier = GlanceModifier.clickable(actionRunCallback<RefreshActionCallback>())
+                    )
                 )
                 Spacer(modifier = GlanceModifier.defaultWeight())
                 Text(
@@ -305,14 +295,14 @@ class ChargerWidget : GlanceAppWidget() {
     }
 
     // ==========================================
-    // 🎨 4x3 WIDGET (Large 2x3 Grid 5~6 Items)
+    // 🎨 4x3 WIDGET (Samsung One UI 2x3 Grid)
     // ==========================================
     @Composable
     private fun Widget4x3(chargers: List<SavedChargerEntity>) {
         Column(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             // --- Header ---
             Row(
@@ -320,7 +310,7 @@ class ChargerWidget : GlanceAppWidget() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "⚡ 실시간 EV 충전소 모니터링",
+                    text = "⚡ 실시간 EV 충전 모니터링",
                     style = TextStyle(
                         color = ColorProvider(day = Color(0xFF00C896), night = Color(0xFF00C896)),
                         fontSize = 13.sp,
@@ -328,6 +318,7 @@ class ChargerWidget : GlanceAppWidget() {
                     )
                 )
                 Spacer(modifier = GlanceModifier.defaultWeight())
+
                 val availableCount = chargers.count { ChargerStatus.fromString(it.status) == ChargerStatus.AVAILABLE }
                 Text(
                     text = "이용 가능 $availableCount/${chargers.size}",
@@ -337,15 +328,27 @@ class ChargerWidget : GlanceAppWidget() {
                         fontWeight = FontWeight.Medium
                     )
                 )
+
+                Spacer(modifier = GlanceModifier.width(8.dp))
+
+                Text(
+                    text = "🔄 새로고침",
+                    style = TextStyle(
+                        color = ColorProvider(day = Color(0xFF3B82F6), night = Color(0xFF3B82F6)),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    modifier = GlanceModifier.clickable(actionRunCallback<RefreshActionCallback>())
+                )
             }
 
-            Spacer(modifier = GlanceModifier.height(10.dp))
+            Spacer(modifier = GlanceModifier.height(8.dp))
 
-            // --- 2x3 Grid Rows ---
-            val rows: List<List<SavedChargerEntity>> = chargers.chunked(3)
-            rows.forEachIndexed { rowIndex, rowItems ->
+            // --- 2x3 Grid (2 Columns x 3 Rows) ---
+            val chunked = chargers.chunked(2)
+            chunked.forEachIndexed { rowIndex, rowList ->
                 if (rowIndex > 0) {
-                    Spacer(modifier = GlanceModifier.height(8.dp))
+                    Spacer(modifier = GlanceModifier.height(6.dp))
                 }
 
                 Row(
@@ -354,102 +357,42 @@ class ChargerWidget : GlanceAppWidget() {
                         .defaultWeight(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    rowItems.forEachIndexed { index, charger ->
-                        if (index > 0) {
+                    rowList.forEachIndexed { colIndex, charger ->
+                        if (colIndex > 0) {
                             Spacer(modifier = GlanceModifier.width(8.dp))
                         }
 
-                        val statusEnum = ChargerStatus.fromString(charger.status)
-                        val statusColor = getStatusColor(statusEnum)
-                        val displayName = formatCleanName(charger.stationName, charger.customName)
-                        val spec = "#${charger.chgerId} · ${charger.chargerTypeName} ${charger.outputKw ?: "7"}kW"
-
-                        Column(
-                            modifier = GlanceModifier
-                                .defaultWeight()
-                                .fillMaxSize()
-                                .background(ImageProvider(R.drawable.bg_widget_card_rounded))
-                                .padding(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = displayName,
-                                style = TextStyle(
-                                    color = ColorProvider(day = Color.White, night = Color.White),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                maxLines = 1
-                            )
-
-                            Spacer(modifier = GlanceModifier.height(2.dp))
-
-                            Text(
-                                text = spec,
-                                style = TextStyle(
-                                    color = ColorProvider(day = Color(0xFF94A3B8), night = Color(0xFF94A3B8)),
-                                    fontSize = 9.sp
-                                ),
-                                maxLines = 1
-                            )
-
-                            Spacer(modifier = GlanceModifier.height(6.dp))
-
-                            // Status Badge Pill
-                            Row(
-                                modifier = GlanceModifier
-                                    .background(ImageProvider(R.drawable.bg_widget_pill_rounded))
-                                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                StatusDot(color = statusColor, sizeDp = 6)
-                                Spacer(modifier = GlanceModifier.width(4.dp))
-                                Text(
-                                    text = getStatusText(statusEnum),
-                                    style = TextStyle(
-                                        color = ColorProvider(day = statusColor, night = statusColor),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                            }
-                        }
+                        WidgetCardItem(charger = charger, modifier = GlanceModifier.defaultWeight())
                     }
 
-                    // Fill remaining slots in row to keep layout balanced
-                    val remaining = 3 - rowItems.size
-                    if (remaining > 0) {
-                        repeat(remaining) {
-                            Spacer(modifier = GlanceModifier.width(8.dp))
-                            Spacer(modifier = GlanceModifier.defaultWeight())
-                        }
+                    if (rowList.size == 1) {
+                        Spacer(modifier = GlanceModifier.width(8.dp))
+                        Spacer(modifier = GlanceModifier.defaultWeight())
                     }
                 }
             }
 
-            Spacer(modifier = GlanceModifier.height(8.dp))
+            Spacer(modifier = GlanceModifier.height(6.dp))
 
-            // --- Footer with Instant Refresh Action ---
+            // --- Footer ---
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val lastFetched = chargers.firstOrNull()?.lastFetchedAt ?: ""
                 Text(
-                    text = "🔄 ${formatTimeOnly(lastFetched)} 동기화 (탭하여 갱신)",
+                    text = "${formatTimeOnly(lastFetched)} 동기화 (15분 자동 갱신)",
                     style = TextStyle(
                         color = ColorProvider(day = Color(0xFF64748B), night = Color(0xFF64748B)),
-                        fontSize = 10.sp
-                    ),
-                    modifier = GlanceModifier.clickable(actionRunCallback<RefreshActionCallback>())
+                        fontSize = 9.sp
+                    )
                 )
                 Spacer(modifier = GlanceModifier.defaultWeight())
                 Text(
                     text = "터치하여 앱 열기 →",
                     style = TextStyle(
                         color = ColorProvider(day = Color(0xFF00C896), night = Color(0xFF00C896)),
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Bold
                     )
                 )
@@ -458,94 +401,145 @@ class ChargerWidget : GlanceAppWidget() {
     }
 
     // ==========================================
+    // 🎨 Standard Widget Card Item Component
+    // ==========================================
+    @Composable
+    private fun WidgetCardItem(charger: SavedChargerEntity, modifier: GlanceModifier) {
+        val statusEnum = ChargerStatus.fromString(charger.status)
+        val statusColor = getStatusColor(statusEnum)
+        val displayName = formatCleanName(charger.stationName, charger.customName)
+        val terminalCode = if (charger.chgerId.length == 6) "${charger.chgerId.substring(0, 5)} ${charger.chgerId.substring(5)}" else "#${charger.chgerId}"
+        val spec = "$terminalCode · ${charger.outputKw ?: "7"}kW"
+
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(ImageProvider(R.drawable.bg_widget_card_rounded))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Row 1: [Dot] [Station Name] ── [Status Pill]
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StatusDot(status = statusEnum)
+                Spacer(modifier = GlanceModifier.width(6.dp))
+                Text(
+                    text = displayName,
+                    style = TextStyle(
+                        color = ColorProvider(day = Color.White, night = Color.White),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    maxLines = 1,
+                    modifier = GlanceModifier.defaultWeight()
+                )
+
+                Spacer(modifier = GlanceModifier.width(4.dp))
+
+                Row(
+                    modifier = GlanceModifier
+                        .background(ImageProvider(R.drawable.bg_widget_pill_rounded))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = getStatusText(statusEnum),
+                        style = TextStyle(
+                            color = ColorProvider(day = statusColor, night = statusColor),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        maxLines = 1
+                    )
+                }
+            }
+
+            Spacer(modifier = GlanceModifier.height(3.dp))
+
+            // Row 2: [Terminal & kW Spec]
+            Text(
+                text = spec,
+                style = TextStyle(
+                    color = ColorProvider(day = Color(0xFF94A3B8), night = Color(0xFF94A3B8)),
+                    fontSize = 9.sp
+                ),
+                maxLines = 1
+            )
+        }
+    }
+
+    // ==========================================
     // 🎨 UI Helpers & Components
     // ==========================================
 
     @Composable
-    private fun StatusDot(color: Color, sizeDp: Int) {
-        Box(
-            modifier = GlanceModifier
-                .size(sizeDp.dp)
-                .background(ColorProvider(day = color, night = color))
-        ) {}
+    private fun StatusDot(status: ChargerStatus) {
+        val iconRes = when (status) {
+            ChargerStatus.AVAILABLE -> R.drawable.ic_dot_green
+            ChargerStatus.CHARGING -> R.drawable.ic_dot_blue
+            ChargerStatus.COMM_ERROR, ChargerStatus.MAINTENANCE, ChargerStatus.SUSPENDED -> R.drawable.ic_dot_orange
+            else -> R.drawable.ic_dot_gray
+        }
+        Image(
+            provider = ImageProvider(iconRes),
+            contentDescription = null,
+            modifier = GlanceModifier.size(8.dp)
+        )
     }
 
     private fun getDefaultChargersIfEmpty(chargers: List<SavedChargerEntity>): List<SavedChargerEntity> {
         if (chargers.isNotEmpty()) return chargers
 
-        // Real-time default nationwide chargers (3 ~ 6 representative chargers)
         return listOf(
             SavedChargerEntity(
-                key = "ME20A199:01",
-                statId = "ME20A199",
-                chgerId = "01",
-                stationName = "서울 노원문화원",
-                chargerTypeName = "DC콤보",
-                outputKw = "100",
-                status = "AVAILABLE",
-                statusCode = 2,
-                statusUpdatedAt = "2026-08-13T17:00:00",
-                lastFetchedAt = "2026-08-13T17:00:00"
-            ),
-            SavedChargerEntity(
-                key = "CU530005:01",
-                statId = "CU530005",
-                chgerId = "01",
-                stationName = "강원 춘천시청",
+                key = "CHARGEV_502616:110508",
+                statId = "CHARGEV_502616",
+                chgerId = "110508",
+                stationName = "두산알프하임",
                 chargerTypeName = "AC완속",
                 outputKw = "7",
                 status = "AVAILABLE",
                 statusCode = 2,
-                statusUpdatedAt = "2026-08-13T17:00:00",
-                lastFetchedAt = "2026-08-13T17:00:00"
+                statusUpdatedAt = "2026-08-14T07:00:00",
+                lastFetchedAt = "2026-08-14T07:00:00"
             ),
             SavedChargerEntity(
-                key = "ME20A1a0:01",
-                statId = "ME20A1a0",
-                chgerId = "01",
-                stationName = "부산역 공영주차장",
-                chargerTypeName = "DC콤보",
-                outputKw = "100",
-                status = "CHARGING",
-                statusCode = 3,
-                statusUpdatedAt = "2026-08-13T17:00:00",
-                lastFetchedAt = "2026-08-13T17:00:00"
-            ),
-            SavedChargerEntity(
-                key = "ME20A1a1:01",
-                statId = "ME20A1a1",
-                chgerId = "01",
-                stationName = "제주공항 충전소",
-                chargerTypeName = "DC콤보",
-                outputKw = "200",
+                key = "CHARGEV_502616:110509",
+                statId = "CHARGEV_502616",
+                chgerId = "110509",
+                stationName = "두산알프하임",
+                chargerTypeName = "AC완속",
+                outputKw = "7",
                 status = "AVAILABLE",
                 statusCode = 2,
-                statusUpdatedAt = "2026-08-13T17:00:00",
-                lastFetchedAt = "2026-08-13T17:00:00"
+                statusUpdatedAt = "2026-08-14T07:00:00",
+                lastFetchedAt = "2026-08-14T07:00:00"
             ),
             SavedChargerEntity(
-                key = "ME20A1a2:01",
-                statId = "ME20A1a2",
-                chgerId = "01",
-                stationName = "대전시청 주차장",
-                chargerTypeName = "DC콤보",
-                outputKw = "100",
+                key = "CHARGEV_502616:110510",
+                statId = "CHARGEV_502616",
+                chgerId = "110510",
+                stationName = "두산알프하임",
+                chargerTypeName = "AC완속",
+                outputKw = "7",
                 status = "AVAILABLE",
                 statusCode = 2,
-                statusUpdatedAt = "2026-08-13T17:00:00",
-                lastFetchedAt = "2026-08-13T17:00:00"
+                statusUpdatedAt = "2026-08-14T07:00:00",
+                lastFetchedAt = "2026-08-14T07:00:00"
             ),
             SavedChargerEntity(
-                key = "ME20A1a3:01",
-                statId = "ME20A1a3",
-                chgerId = "01",
-                stationName = "인천T1 공영주차장",
-                chargerTypeName = "DC콤보",
-                outputKw = "100",
-                status = "CHARGING",
-                statusCode = 3,
-                statusUpdatedAt = "2026-08-13T17:00:00",
-                lastFetchedAt = "2026-08-13T17:00:00"
+                key = "CHARGEV_502616:110511",
+                statId = "CHARGEV_502616",
+                chgerId = "110511",
+                stationName = "두산알프하임",
+                chargerTypeName = "AC완속",
+                outputKw = "7",
+                status = "AVAILABLE",
+                statusCode = 2,
+                statusUpdatedAt = "2026-08-14T07:00:00",
+                lastFetchedAt = "2026-08-14T07:00:00"
             )
         )
     }
@@ -580,16 +574,16 @@ class ChargerWidget : GlanceAppWidget() {
         if (!customName.isNullOrBlank()) return customName
 
         return rawName
-            .replace("서울특별시", "서울")
-            .replace("강원특별자치도", "강원")
-            .replace("전라북도", "전북")
-            .replace("전라남도", "전남")
-            .replace("경상북도", "경북")
-            .replace("경상남도", "경남")
-            .replace("충청북도", "충북")
-            .replace("충청남도", "충남")
-            .replace("특별자치도", "")
-            .replace("광역시", "")
+            .replace("경기 남양주시 ", "")
+            .replace("서울특별시 ", "")
+            .replace("강원특별자치도 ", "")
+            .replace("전라북도 ", "")
+            .replace("전라남도 ", "")
+            .replace("경상북도 ", "")
+            .replace("경상남도 ", "")
+            .replace("충청북도 ", "")
+            .replace("충청남도 ", "")
+            .replace("아파트", "")
             .trim()
     }
 
