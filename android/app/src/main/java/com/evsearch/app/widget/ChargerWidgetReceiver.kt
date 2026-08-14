@@ -17,9 +17,14 @@ import java.util.concurrent.TimeUnit
 
 object WidgetUpdateHelper {
     suspend fun updateAllWidgets(context: Context) {
-        val widget = ChargerWidget()
+        val widget4x1 = ChargerWidget4x1()
+        val widget4x2 = ChargerWidget4x2()
+        val widget4x3 = ChargerWidget4x3()
+
         try {
-            widget.updateAll(context)
+            widget4x1.updateAll(context)
+            widget4x2.updateAll(context)
+            widget4x3.updateAll(context)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -27,13 +32,14 @@ object WidgetUpdateHelper {
         // Direct GlanceAppWidgetManager update for each active glance ID
         try {
             val glanceManager = GlanceAppWidgetManager(context)
-            val glanceIds = glanceManager.getGlanceIds(ChargerWidget::class.java)
-            glanceIds.forEach { glanceId ->
-                try {
-                    widget.update(context, glanceId)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+            glanceManager.getGlanceIds(ChargerWidget4x1::class.java).forEach {
+                try { widget4x1.update(context, it) } catch (e: Exception) {}
+            }
+            glanceManager.getGlanceIds(ChargerWidget4x2::class.java).forEach {
+                try { widget4x2.update(context, it) } catch (e: Exception) {}
+            }
+            glanceManager.getGlanceIds(ChargerWidget4x3::class.java).forEach {
+                try { widget4x3.update(context, it) } catch (e: Exception) {}
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -65,7 +71,7 @@ object WidgetUpdateHelper {
 
 open class ChargerWidgetReceiver : GlanceAppWidgetReceiver() {
 
-    override val glanceAppWidget: GlanceAppWidget = ChargerWidget()
+    override val glanceAppWidget: GlanceAppWidget = ChargerWidget4x2()
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
@@ -76,7 +82,6 @@ open class ChargerWidgetReceiver : GlanceAppWidgetReceiver() {
         fun scheduleBackgroundWork(context: Context) {
             val workManager = WorkManager.getInstance(context)
 
-            // 1) Trigger immediate one-time sync to populate latest status on home screen right away
             val immediateWork = OneTimeWorkRequestBuilder<ChargerWidgetWorker>().build()
             workManager.enqueueUniqueWork(
                 "ChargerWidgetImmediateSync",
@@ -84,7 +89,6 @@ open class ChargerWidgetReceiver : GlanceAppWidgetReceiver() {
                 immediateWork
             )
 
-            // 2) Schedule recurring 15-minute periodic background refresh
             val periodicWork = PeriodicWorkRequestBuilder<ChargerWidgetWorker>(
                 15, TimeUnit.MINUTES
             ).build()
@@ -99,7 +103,7 @@ open class ChargerWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 class ChargerWidget4x1Receiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = ChargerWidget()
+    override val glanceAppWidget: GlanceAppWidget = ChargerWidget4x1()
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
         ChargerWidgetReceiver.scheduleBackgroundWork(context)
@@ -107,7 +111,7 @@ class ChargerWidget4x1Receiver : GlanceAppWidgetReceiver() {
 }
 
 class ChargerWidget4x2Receiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = ChargerWidget()
+    override val glanceAppWidget: GlanceAppWidget = ChargerWidget4x2()
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
         ChargerWidgetReceiver.scheduleBackgroundWork(context)
@@ -115,7 +119,7 @@ class ChargerWidget4x2Receiver : GlanceAppWidgetReceiver() {
 }
 
 class ChargerWidget4x3Receiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = ChargerWidget()
+    override val glanceAppWidget: GlanceAppWidget = ChargerWidget4x3()
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
         ChargerWidgetReceiver.scheduleBackgroundWork(context)
