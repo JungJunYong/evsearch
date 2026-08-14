@@ -122,12 +122,10 @@ class ChargerWidget : GlanceAppWidget() {
                 .clickable(actionStartActivity(componentName))
         ) {
             when {
-                // 4x1 (Small) - height < 110dp: Up to 3 chargers
-                size.height < 110.dp -> Widget4x1(chargers.take(3))
-                // 4x2 (Medium Standard) - 110 ~ 210dp: Up to 6 chargers (2x3 Grid)
-                size.height < 210.dp -> Widget4x2(chargers.take(6))
-                // 4x3 (Large Dashboard) - 210dp+: Up to 6 chargers (2x3 Grid)
-                else -> Widget4x3(chargers.take(6))
+                // 4x1 (Single Row Compact Bar) - height < 70dp: Up to 3 chargers in 1 row
+                size.height < 70.dp -> Widget4x1(chargers.take(3))
+                // 4x2, 4x3 & larger - height >= 70dp: Full 6 chargers in 2x3 Grid
+                else -> Widget4x2(chargers.take(6))
             }
         }
     }
