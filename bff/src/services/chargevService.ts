@@ -7,6 +7,60 @@ const stationDetailMap = new Map<string, ChargerStation>();
 
 const CHARGEV_BASE_URL = 'https://app.gschargev.co.kr';
 
+/**
+ * Fetch dynamic charger list with location & real-time status when CHARGEV_TOKEN / CHARGEV_ID is set
+ */
+async function fetchDynamicChargersFromApi(bid: string): Promise<Charger[] | null> {
+  const token = process.env.CHARGEV_TOKEN || process.env.CHARGEV_AUTH_TOKEN;
+  if (!token) return null;
+
+  try {
+    const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+    const res = await fetch(`${CHARGEV_BASE_URL}/api/station/chargerList`, {
+      method: 'POST',
+      headers: {
+        'User-Agent': 'Dart/3.0 (dart:io)',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': authHeader,
+      },
+      body: JSON.stringify({ bid, payStatusNew: '', payStatusNewCd: '' }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!res.ok) return null;
+    const json = (await res.json()) as any;
+    if (json.result !== '0000' || !Array.isArray(json.data) || json.data.length === 0) return null;
+
+    return json.data.map((c: any) => {
+      const cNum = c.c_num || c.cNum || c.charger_no || String(c.chger_id || '');
+      const rawCode = cNum || '01';
+      const formattedCode = rawCode.length === 6 && rawCode.startsWith('11050') ? `11050 ${rawCode.slice(5)}` : rawCode;
+      const location = c.location || c.charger_location || c.addr_detail || c.chger_location || undefined;
+      const isAvailable = c.charging_status === '0' || c.status === 'AVAILABLE' || c.stat === '2';
+      const isCharging = c.charging_status === '1' || c.status === 'CHARGING' || c.stat === '3';
+      const isMaintenance = c.charging_status === '2' || c.status === 'MAINTENANCE' || c.stat === '5';
+
+      return {
+        statId: `CHARGEV_${bid}`,
+        chgerId: rawCode,
+        chargerCode: formattedCode,
+        location: location,
+        typeCode: '02',
+        typeName: `AC완속 (${c.output_kw || '7'}kW)`,
+        outputKw: String(c.output_kw || '7'),
+        status: (isMaintenance ? 'MAINTENANCE' : (isCharging ? 'CHARGING' : 'AVAILABLE')) as ChargerStatusType,
+        statusCode: isMaintenance ? 5 : (isCharging ? 3 : 2),
+        statusUpdatedAt: new Date().toISOString(),
+        isDeleted: false,
+      };
+    });
+  } catch (e) {
+    console.warn(`[ChargeV Service] Failed dynamic chargerList fetch for bid ${bid}:`, e);
+    return null;
+  }
+}
+
 export interface ChargevStationItem {
   es_key: string;
   station_name: string;
@@ -60,7 +114,7 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
       return [];
     }
 
-    const stations: ChargerStation[] = json.data.map((item) => {
+    const stations: ChargerStation[] = await Promise.all(json.data.map(async (item) => {
       const lat = parseFloat(item.latitude) || 0;
       const lng = parseFloat(item.longitude) || 0;
       const statId = `CHARGEV_${item.es_key}`;
@@ -71,6 +125,9 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
       const isApartment = item.station_name.includes('아파트') || item.station_name.includes('자이') || item.station_name.includes('래미안') || item.station_name.includes('힐스테이트') || item.station_name.includes('푸르지오') || item.station_name.includes('더샵') || item.station_name.includes('아이파크');
 
       const numChargers = isAlfheim ? 36 : (isMegaComplex ? 36 : (isApartment ? 20 : 8));
+
+      // Try fetching live authenticated chargers dynamically from ChargEV API
+      const dynamicChargers = await fetchDynamicChargersFromApi(item.es_key);
 
       // Exact Doosan Alfheim real-world verified location mappings matching ChargEV master DB
       const ALFHEIM_LOCATION_MAP: Record<string, string> = {
@@ -112,7 +169,7 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
         '110543': '128동 지하 2층 중앙 통로',
       };
 
-      const chargers: Charger[] = Array.from({ length: numChargers }, (_, i) => {
+      const fallbackChargers: Charger[] = Array.from({ length: numChargers }, (_, i) => {
         // Physical charger terminal hardware code from live ChargEV API (e.g. 110508 -> formatted as "11050 8")
         const rawCode = isAlfheim ? String(110508 + i) : `11${String(100 + (parseInt(item.es_key) % 800)).padStart(3, '0')}${String(i + 1).padStart(2, '0')}`;
         const formattedCode = isAlfheim ? `11050 ${8 + i}` : rawCode;
@@ -139,9 +196,11 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
         };
       });
 
+      const chargers: Charger[] = (dynamicChargers && dynamicChargers.length > 0) ? dynamicChargers : fallbackChargers;
+
       const availableCount = chargers.filter((c) => c.status === 'AVAILABLE').length;
       const chargingCount = chargers.filter((c) => c.status === 'CHARGING').length;
-      const maintenanceCount = chargers.filter((c) => c.status === 'MAINTENANCE').length;
+      const errorCount = chargers.filter((c) => c.status === 'COMM_ERROR' || c.status === 'MAINTENANCE').length;
 
       const stationObj: ChargerStation = {
         statId,
@@ -157,7 +216,7 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
           total: chargers.length,
           available: availableCount,
           charging: chargingCount,
-          maintenance: maintenanceCount,
+          maintenance: errorCount,
           unknown: 0,
         },
       };
@@ -166,7 +225,7 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
       stationDetailMap.set(statId, stationObj);
       allChargevStations.set(statId, stationObj);
       return stationObj;
-    });
+    }));
 
     chargevCache.set(cacheKey, stations);
     return stations;
