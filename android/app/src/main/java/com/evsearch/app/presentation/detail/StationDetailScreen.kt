@@ -139,11 +139,30 @@ fun StationDetailScreen(
                                     color = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.padding(vertical = 4.dp)
                                 )
-                                Text(
-                                    text = "★ 아이콘을 눌러 홈 위젯 관리",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+
+                                Surface(
+                                    color = Color(0xFF00C896).copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        width = 1.dp,
+                                        color = Color(0xFF00C896)
+                                    ),
+                                    modifier = Modifier.clickable {
+                                        viewModel.registerFirst6Chargers()
+                                    }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "⭐ 6대 일괄 위젯 등록",
+                                            color = Color(0xFF00C896),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                             }
                         }
 

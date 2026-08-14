@@ -56,6 +56,19 @@ class StationDetailViewModel(
         }
     }
 
+    fun registerFirst6Chargers() {
+        val station = _uiState.value.station ?: return
+        val chargersToSave = station.chargers.take(6)
+        viewModelScope.launch {
+            chargersToSave.forEach { charger ->
+                repository.saveChargerToWidget(station, charger)
+            }
+            _uiState.value = _uiState.value.copy(
+                widgetSavedSuccessMessage = "${station.name} 충전기 ${chargersToSave.size}대가 위젯에 일괄 등록되었습니다!"
+            )
+        }
+    }
+
     fun toggleWidgetRegistration(charger: Charger) {
         val station = _uiState.value.station ?: return
         val key = "${station.statId}:${charger.chgerId}"
