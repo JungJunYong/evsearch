@@ -242,7 +242,10 @@ private fun renderStations(
     stations: List<ChargerStation>,
     userLocation: Pair<Double, Double>?
 ) {
-    Log.d(TAG, "renderStations called: stations=${stations.size}, userLocation=$userLocation")
+    val validStations = stations.filter { it.lat > 0.0 && it.lng > 0.0 }
+    MapStationsHolder.stations = validStations
+
+    Log.d(TAG, "renderStations called: valid=${validStations.size}, total=${stations.size}, userLocation=$userLocation")
     val labelManager = map.labelManager ?: run {
         Log.e(TAG, "labelManager is null!")
         return
@@ -253,34 +256,35 @@ private fun renderStations(
     }
     layer.removeAll()
 
-    // 핀 스타일 등록 (ID에 타임스탬프를 붙여서 항상 새로 등록 — 이전 캐시 무효화)
+    // 핀 스타일 등록 (ID에 타임스탬프를 붙여서 항상 새로 등록)
     val styleId = System.currentTimeMillis()
     val availableStyle = labelManager.addLabelStyles(
         LabelStyles.from("pin_avail_$styleId", LabelStyle.from(createCirclePinBitmap(0xFF00C896.toInt())))
-    ) ?: run {
-        Log.e(TAG, "availableStyle is null!")
-        return
-    }
+    ) ?: return
+    val chargevStyle = labelManager.addLabelStyles(
+        LabelStyles.from("pin_chargev_$styleId", LabelStyle.from(createCirclePinBitmap(0xFF3B82F6.toInt())))
+    ) ?: return
     val unavailableStyle = labelManager.addLabelStyles(
         LabelStyles.from("pin_unavail_$styleId", LabelStyle.from(createCirclePinBitmap(0xFF64748B.toInt())))
-    ) ?: run {
-        Log.e(TAG, "unavailableStyle is null!")
-        return
-    }
+    ) ?: return
     val meStyle = labelManager.addLabelStyles(
-        LabelStyles.from("pin_me_$styleId", LabelStyle.from(createCirclePinBitmap(0xFF3B82F6.toInt())))
-    ) ?: run {
-        Log.e(TAG, "meStyle is null!")
-        return
-    }
+        LabelStyles.from("pin_me_$styleId", LabelStyle.from(createMeLocationBitmap()))
+    ) ?: return
 
-    Log.d(TAG, "Styles registered, adding ${stations.size} labels")
+    Log.d(TAG, "Styles registered, adding ${validStations.size} labels")
 
     // 충전소 핀 렌더링
-    stations.filter { it.lat > 0 && it.lng > 0 }.forEachIndexed { index, station ->
+    validStations.forEachIndexed { index, station ->
         val isAvailable = station.summary.available > 0
-        val options = LabelOptions.from("station_$index", LatLng.from(station.lat, station.lng))
-            .setStyles(if (isAvailable) availableStyle else unavailableStyle)
+        val isChargeV = station.operatorName?.contains("차지비") == true || station.statId.startsWith("CHARGEV_")
+        val chosenStyle = when {
+            isChargeV -> chargevStyle
+            isAvailable -> availableStyle
+            else -> unavailableStyle
+        }
+
+        val options = LabelOptions.from("station_${station.statId}_$index", LatLng.from(station.lat, station.lng))
+            .setStyles(chosenStyle)
             .setTag(index) // 클릭 시 인덱스로 ChargerStation 조회
             .setClickable(true)
 
@@ -298,18 +302,64 @@ private fun renderStations(
     }
 }
 
-/** 깔끔한 원형 점 마커 비트맵 생성 (순수 원, 테두리/중앙점 없음) */
-private fun createCirclePinBitmap(color: Int, radiusPx: Int = 20): Bitmap {
-    val size = radiusPx * 2
+/** 깔끔하고 선명한 고해상도 원형 마커 비트맵 생성 (외부 흰색 테두리 + 내부 고대비 컬러) */
+private fun createCirclePinBitmap(fillColor: Int, radiusPx: Int = 30): Bitmap {
+    val size = (radiusPx * 2) + 8
+    val center = size / 2f
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
 
-    // 단일 컬러 원 (깔끔한 픽셀 느낌)
-    val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        this.color = color
+    // 1. 외부 그림자/흰색 링
+    val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFFFFF.toInt()
         style = Paint.Style.FILL
     }
-    canvas.drawCircle(radiusPx.toFloat(), radiusPx.toFloat(), radiusPx.toFloat(), fillPaint)
+    canvas.drawCircle(center, center, radiusPx + 3f, borderPaint)
+
+    // 2. 메인 컬러 원
+    val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = fillColor
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(center, center, radiusPx.toFloat(), fillPaint)
+
+    // 3. 내부 미니 도트
+    val innerDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFFFFF.toInt()
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(center, center, radiusPx * 0.35f, innerDotPaint)
+
+    return bitmap
+}
+
+/** 내 위치 전용 블루 펄스 마커 */
+private fun createMeLocationBitmap(radiusPx: Int = 32): Bitmap {
+    val size = (radiusPx * 2) + 8
+    val center = size / 2f
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+
+    // 반투명 외곽 링
+    val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x403B82F6.toInt()
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(center, center, center, haloPaint)
+
+    // 흰색 테두리
+    val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFFFFF.toInt()
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(center, center, radiusPx * 0.7f + 2f, borderPaint)
+
+    // 중앙 파란 점
+    val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF2563EB.toInt()
+        style = Paint.Style.FILL
+    }
+    canvas.drawCircle(center, center, radiusPx * 0.7f, fillPaint)
 
     return bitmap
 }
