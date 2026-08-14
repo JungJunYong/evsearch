@@ -53,17 +53,55 @@ class ChargerWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val db = AppDatabase.getInstance(context)
         val dbSaved = db.savedChargerDao().getAllSavedChargers()
-        val hasSaved = dbSaved.isNotEmpty()
-        val chargers = if (hasSaved) dbSaved else getDefaultChargersIfEmpty(emptyList())
 
         provideContent {
             GlanceTheme {
                 val size = LocalSize.current
-                ChargerWidgetContent(
-                    context = context,
-                    chargers = chargers,
-                    hasSaved = hasSaved,
-                    size = size
+                if (dbSaved.isEmpty()) {
+                    EmptyWidgetContent(context = context)
+                } else {
+                    ChargerWidgetContent(
+                        context = context,
+                        chargers = dbSaved,
+                        size = size
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun EmptyWidgetContent(context: Context) {
+        val componentName = ComponentName(context, MainActivity::class.java)
+
+        Box(
+            modifier = GlanceModifier
+                .fillMaxSize()
+                .background(ImageProvider(R.drawable.bg_widget_rounded))
+                .clickable(actionStartActivity(componentName))
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "⚡ 등록된 위젯 충전기가 없습니다",
+                    style = TextStyle(
+                        color = ColorProvider(day = Color.White, night = Color.White),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+                Spacer(modifier = GlanceModifier.height(6.dp))
+                Text(
+                    text = "앱에서 충전기 [위젯 추가 ⭐]를 눌러 등록해보세요 (터치하여 열기)",
+                    style = TextStyle(
+                        color = ColorProvider(day = Color(0xFF00C896), night = Color(0xFF00C896)),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                 )
             }
         }
@@ -73,7 +111,6 @@ class ChargerWidget : GlanceAppWidget() {
     private fun ChargerWidgetContent(
         context: Context,
         chargers: List<SavedChargerEntity>,
-        hasSaved: Boolean,
         size: DpSize
     ) {
         val componentName = ComponentName(context, MainActivity::class.java)
@@ -169,7 +206,7 @@ class ChargerWidget : GlanceAppWidget() {
                     Row(
                         modifier = GlanceModifier
                             .background(ImageProvider(R.drawable.bg_widget_pill_rounded))
-                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -489,61 +526,6 @@ class ChargerWidget : GlanceAppWidget() {
         )
     }
 
-    private fun getDefaultChargersIfEmpty(chargers: List<SavedChargerEntity>): List<SavedChargerEntity> {
-        if (chargers.isNotEmpty()) return chargers
-
-        return listOf(
-            SavedChargerEntity(
-                key = "CHARGEV_502616:110508",
-                statId = "CHARGEV_502616",
-                chgerId = "110508",
-                stationName = "두산알프하임",
-                chargerTypeName = "AC완속",
-                outputKw = "7",
-                status = "AVAILABLE",
-                statusCode = 2,
-                statusUpdatedAt = "2026-08-14T07:00:00",
-                lastFetchedAt = "2026-08-14T07:00:00"
-            ),
-            SavedChargerEntity(
-                key = "CHARGEV_502616:110509",
-                statId = "CHARGEV_502616",
-                chgerId = "110509",
-                stationName = "두산알프하임",
-                chargerTypeName = "AC완속",
-                outputKw = "7",
-                status = "AVAILABLE",
-                statusCode = 2,
-                statusUpdatedAt = "2026-08-14T07:00:00",
-                lastFetchedAt = "2026-08-14T07:00:00"
-            ),
-            SavedChargerEntity(
-                key = "CHARGEV_502616:110510",
-                statId = "CHARGEV_502616",
-                chgerId = "110510",
-                stationName = "두산알프하임",
-                chargerTypeName = "AC완속",
-                outputKw = "7",
-                status = "AVAILABLE",
-                statusCode = 2,
-                statusUpdatedAt = "2026-08-14T07:00:00",
-                lastFetchedAt = "2026-08-14T07:00:00"
-            ),
-            SavedChargerEntity(
-                key = "CHARGEV_502616:110511",
-                statId = "CHARGEV_502616",
-                chgerId = "110511",
-                stationName = "두산알프하임",
-                chargerTypeName = "AC완속",
-                outputKw = "7",
-                status = "AVAILABLE",
-                statusCode = 2,
-                statusUpdatedAt = "2026-08-14T07:00:00",
-                lastFetchedAt = "2026-08-14T07:00:00"
-            )
-        )
-    }
-
     private fun getStatusColor(status: ChargerStatus): Color {
         return when (status) {
             ChargerStatus.AVAILABLE -> Color(0xFF00C896)   // Teal Green
@@ -572,19 +554,7 @@ class ChargerWidget : GlanceAppWidget() {
 
     private fun formatCleanName(rawName: String, customName: String?): String {
         if (!customName.isNullOrBlank()) return customName
-
-        return rawName
-            .replace("경기 남양주시 ", "")
-            .replace("서울특별시 ", "")
-            .replace("강원특별자치도 ", "")
-            .replace("전라북도 ", "")
-            .replace("전라남도 ", "")
-            .replace("경상북도 ", "")
-            .replace("경상남도 ", "")
-            .replace("충청북도 ", "")
-            .replace("충청남도 ", "")
-            .replace("아파트", "")
-            .trim()
+        return rawName.trim()
     }
 
     private fun formatTimeOnly(isoString: String): String {
