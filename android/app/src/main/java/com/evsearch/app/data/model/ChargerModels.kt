@@ -46,7 +46,7 @@ data class Charger(
     val chargerStatusEnum: ChargerStatus
         get() = ChargerStatus.fromString(status)
     
-    val kepcoStatusText: String
+    val displayStatusText: String
         get() = when (cpStat) {
             "1" -> "충전가능"
             "2" -> "충전중"
@@ -55,8 +55,19 @@ data class Charger(
             "5" -> "통신미연결"
             "6" -> "충전종료"
             "7" -> "계획정지"
-            else -> "상태확인중"
+            else -> when (status.uppercase()) {
+                "AVAILABLE" -> "충전가능"
+                "CHARGING" -> "충전중"
+                "MAINTENANCE" -> "점검/고장"
+                "COMM_ERROR" -> "통신장애"
+                "SUSPENDED" -> "운영정지"
+                "RESERVED" -> "예약중"
+                else -> "상태확인중"
+            }
         }
+
+    val kepcoStatusText: String
+        get() = displayStatusText
     
     val kepcoTypeText: String
         get() = when (cpTp) {
