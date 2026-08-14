@@ -145,13 +145,12 @@ fun MapScreen(
         }
     }
 
-    // 🎯 검색 결과가 있을 때 첫 번째 해당 위치로 지도 카메라 자동 이동 & 충전소 선택
+    // 🎯 검색 결과가 있을 때 첫 번째 해당 위치로 지도 카메라 자동 동기화
     LaunchedEffect(filteredStations, searchQuery) {
         if (searchQuery.isNotBlank() && filteredStations.isNotEmpty()) {
             val topStation = filteredStations.first()
             if (topStation.lat > 0 && topStation.lng > 0) {
                 focusLocation = Pair(topStation.lat, topStation.lng)
-                selectedStation = topStation
             }
         }
     }
@@ -624,7 +623,12 @@ fun SamsungOneUIStationCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp)
+                ) {
                     Surface(
                         shape = CircleShape,
                         color = if (isChargeV) Color(0xFF3B82F6).copy(alpha = 0.15f) else (if (isAvailable) Color(0xFF00C896).copy(alpha = 0.15f) else Color.Gray.copy(alpha = 0.15f)),
@@ -642,48 +646,59 @@ fun SamsungOneUIStationCard(
 
                     Spacer(modifier = Modifier.width(10.dp))
 
-                    Column {
+                    Column(modifier = Modifier.weight(1f, fill = false)) {
                         Text(
                             text = station.name,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = operator,
                             fontSize = 11.sp,
                             fontWeight = if (isChargeV) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isChargeV) Color(0xFF3B82F6) else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (isChargeV) Color(0xFF3B82F6) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                // 거리 표시
-                station.distanceKm?.let { dist ->
-                    Text(
-                        text = if (dist < 1.0) "${(dist * 1000).toInt()}m" else String.format("%.1fkm", dist),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF3B82F6),
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-                }
-
-                // 사용가능 표시 (⚡ N/N)
-                Surface(
-                    color = if (isAvailable) Color(0xFF00C896).copy(alpha = 0.15f) else Color(0xFF64748B).copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(12.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    Text(
-                        text = if (isAvailable) "⚡ ${station.summary.available}/${station.summary.total} 가용" else "✕ 이용불가",
-                        color = if (isAvailable) Color(0xFF00C896) else Color(0xFF94A3B8),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                    // 거리 표시
+                    station.distanceKm?.let { dist ->
+                        if (dist > 0 && dist < 1000) {
+                            Text(
+                                text = if (dist < 1.0) "${(dist * 1000).toInt()}m" else String.format("%.1fkm", dist),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF3B82F6),
+                                modifier = Modifier.padding(end = 6.dp)
+                            )
+                        }
+                    }
+
+                    // 사용가능 표시 (⚡ N/N)
+                    Surface(
+                        color = if (isAvailable) Color(0xFF00C896).copy(alpha = 0.15f) else Color(0xFF64748B).copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = if (isAvailable) "⚡ ${station.summary.available}/${station.summary.total} 가용" else "✕ 이용불가",
+                            color = if (isAvailable) Color(0xFF00C896) else Color(0xFF94A3B8),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
 
@@ -694,7 +709,7 @@ fun SamsungOneUIStationCard(
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

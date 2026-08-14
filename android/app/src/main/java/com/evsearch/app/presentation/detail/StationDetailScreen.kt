@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.evsearch.app.data.model.Charger
@@ -321,6 +322,7 @@ fun SamsungOneUIChargerItemCard(
                 .fillMaxWidth()
                 .padding(18.dp)
         ) {
+            // Top Row: [Icon] [충전기 11050 8] ---------------- [🟢 충전가능]
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -328,69 +330,80 @@ fun SamsungOneUIChargerItemCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Surface(
                         shape = CircleShape,
                         color = statusColor.copy(alpha = 0.15f),
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(32.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Default.LocationOn,
                                 contentDescription = null,
                                 tint = statusColor,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
 
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = if (!charger.chargerCode.isNullOrBlank()) "충전기 [${charger.chargerCode}]" else "단말기 #${charger.chgerId}",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            // High-visibility status pill
-                            Surface(
-                                color = statusColor.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(8.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, statusColor.copy(alpha = 0.4f))
-                            ) {
-                                Text(
-                                    text = statusLabel,
-                                    color = statusColor,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                        charger.location?.let { loc ->
-                            Spacer(modifier = Modifier.height(3.dp))
-                            Text(
-                                text = "📍 $loc",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF3B82F6)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (!charger.chargerCode.isNullOrBlank()) "충전기 ${charger.chargerCode}" else "단말기 #${charger.chgerId}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // High-visibility status badge (Always 1 line, never wrapped)
+                Surface(
+                    color = statusColor.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, statusColor.copy(alpha = 0.4f))
+                ) {
+                    Text(
+                        text = statusLabel,
+                        color = statusColor,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Middle Row: Spec info + Widget Pin Button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    charger.location?.let { loc ->
                         Text(
-                            text = "${charger.outputKw ?: "7"}kW · ${charger.kepcoTypeText}",
+                            text = "📍 $loc",
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF3B82F6),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                     }
+                    Text(
+                        text = "${charger.outputKw ?: "7"}kW · ${charger.kepcoTypeText}",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
                 // Elegant One UI Bookmark/Pin Widget Toggle Pill
@@ -405,26 +418,26 @@ fun SamsungOneUIChargerItemCard(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = "위젯 등록",
                             tint = if (isPinned) Color(0xFF00C896) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = if (isPinned) "위젯 등록됨" else "위젯 추가",
                             color = if (isPinned) Color(0xFF00C896) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Samsung One UI Status Indicator Bar
             Row(
@@ -435,15 +448,15 @@ fun SamsungOneUIChargerItemCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(10.dp)
+                            .size(8.dp)
                             .clip(CircleShape)
                             .background(statusColor)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = statusDesc,
                         color = statusColor,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
