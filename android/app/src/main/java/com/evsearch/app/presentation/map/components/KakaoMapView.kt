@@ -127,6 +127,13 @@ fun KakaoMapView(
                                     LatLng.from(centerLat, centerLng), 12
                                 )
                             )
+                            // 초기 viewport 설정 (첫 렌더부터 화면 밖 마커 제외)
+                            val initPad = 0.052
+                            MapStationsHolder.minLat = centerLat - initPad
+                            MapStationsHolder.maxLat = centerLat + initPad
+                            MapStationsHolder.minLng = centerLng - initPad
+                            MapStationsHolder.maxLng = centerLng + initPad
+                            MapStationsHolder.boundsSet = true
 
                             // 핀(라벨) 클릭: tag에 ChargerStation 인덱스 저장
                             map.setOnLabelClickListener(
@@ -196,14 +203,6 @@ fun KakaoMapView(
                                         // 줌 레벨에 따른 대략적인 뷰포트 반경 계산
                                         // 줌 12 ≈ 0.05도, 줌 13 ≈ 0.025도 (반경 기준)
                                         val zoom = position.zoomLevel
-                                        // 줌 레벨이 바뀌면 클러스터/개별 표시를 다시 계산
-                                        if (zoom != MapStationsHolder.lastZoomBucket) {
-                                            renderStations(
-                                                kakaoMap,
-                                                MapStationsHolder.stations,
-                                                MapStationsHolder.userLocation
-                                            )
-                                        }
                                         val radiusDeg = when {
                                             zoom >= 15 -> 0.005
                                             zoom >= 14 -> 0.01
@@ -213,12 +212,32 @@ fun KakaoMapView(
                                             else -> 0.16
                                         }
                                         val center = position.position
-                                        val minLat = center.latitude - radiusDeg
-                                        val maxLat = center.latitude + radiusDeg
-                                        val minLng = center.longitude - radiusDeg
-                                        val maxLng = center.longitude + radiusDeg
-                                        Log.d(TAG, "Viewport changed: center=(${center.latitude}, ${center.longitude}), zoom=$zoom, r=$radiusDeg")
-                                        onViewportChanged(minLat, minLng, maxLat, maxLng)
+                                        // 렌더 필터용 viewport 저장 (약간 여유를 둬 경계 마커도 포함)
+                                        val pad = radiusDeg * 1.3
+                                        MapStationsHolder.minLat = center.latitude - pad
+                                        MapStationsHolder.maxLat = center.latitude + pad
+                                        MapStationsHolder.minLng = center.longitude - pad
+                                        MapStationsHolder.maxLng = center.longitude + pad
+                                        MapStationsHolder.boundsSet = true
+
+                                        // debounce: 카메라가 멈춘 뒤 한 번만 다시 그린다(이동 중 매 프레임 렌더 방지)
+                                        MapStationsHolder.pendingRender?.let { MapStationsHolder.mainHandler.removeCallbacks(it) }
+                                        val r = Runnable {
+                                            renderStations(
+                                                kakaoMap,
+                                                MapStationsHolder.stations,
+                                                MapStationsHolder.userLocation
+                                            )
+                                        }
+                                        MapStationsHolder.pendingRender = r
+                                        MapStationsHolder.mainHandler.postDelayed(r, 140)
+
+                                        onViewportChanged(
+                                            center.latitude - radiusDeg,
+                                            center.longitude - radiusDeg,
+                                            center.latitude + radiusDeg,
+                                            center.longitude + radiusDeg
+                                        )
                                     }
                                 }
                             )
@@ -253,6 +272,25 @@ object MapStationsHolder {
     var userLocation: Pair<Double, Double>? = null
     var lastZoomBucket: Int = -1
     val clusterPositions = HashMap<String, LatLng>()
+    // 현재 화면(viewport) 범위. 이 안의 마커만 렌더해 대량 마커 랙을 없앤다.
+    var minLat = -90.0; var maxLat = 90.0; var minLng = -180.0; var maxLng = 180.0
+    var boundsSet = false
+    // 카메라 이동 debounce
+    val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    var pendingRender: Runnable? = null
+}
+
+// 비트맵 캐시: 매 렌더마다 비트맵을 다시 그리지 않는다.
+private val pinBitmapCache = HashMap<Int, Bitmap>()
+private val clusterBitmapCache = HashMap<String, Bitmap>()
+
+private fun cachedPinBitmap(color: Int): Bitmap =
+    pinBitmapCache.getOrPut(color) { createCirclePinBitmap(color) }
+
+private fun cachedClusterBitmap(count: Int, hasAvailable: Boolean): Bitmap {
+    // 개수는 정확히 표시하되 같은 (개수,색) 조합은 캐시 재사용
+    val key = "${count}_$hasAvailable"
+    return clusterBitmapCache.getOrPut(key) { createClusterBitmap(count, hasAvailable) }
 }
 
 /** 이 줌 레벨 이상에서는 개별 마커, 미만에서는 격자 클러스터링 */
@@ -278,8 +316,9 @@ private fun renderStations(
     stations: List<ChargerStation>,
     userLocation: Pair<Double, Double>?
 ) {
-    val validStations = stations.filter { it.lat > 0.0 && it.lng > 0.0 }
-    MapStationsHolder.stations = validStations
+    // 전체 목록은 클릭 조회용으로 보관하되, 렌더는 화면(viewport) 안 마커로 한정한다.
+    val allValid = stations.filter { it.lat > 0.0 && it.lng > 0.0 }
+    MapStationsHolder.stations = allValid
     MapStationsHolder.userLocation = userLocation
 
     val labelManager = map.labelManager ?: run {
@@ -293,16 +332,26 @@ private fun renderStations(
     layer.removeAll()
     MapStationsHolder.clusterPositions.clear()
 
-    // 핀 스타일 등록 (ID에 타임스탬프를 붙여서 항상 새로 등록)
+    // viewport 필터: 화면 밖 마커는 렌더하지 않는다(대량 마커 랙 방지).
+    val visible = if (MapStationsHolder.boundsSet) {
+        allValid.withIndex().filter { (_, s) ->
+            s.lat in MapStationsHolder.minLat..MapStationsHolder.maxLat &&
+                s.lng in MapStationsHolder.minLng..MapStationsHolder.maxLng
+        }
+    } else {
+        allValid.withIndex().toList()
+    }
+
+    // 핀 스타일 등록 (비트맵은 캐시 재사용)
     val styleId = System.currentTimeMillis()
     val availableStyle = labelManager.addLabelStyles(
-        LabelStyles.from("pin_avail_$styleId", LabelStyle.from(createCirclePinBitmap(0xFF00C896.toInt())))
+        LabelStyles.from("pin_avail_$styleId", LabelStyle.from(cachedPinBitmap(0xFF00C896.toInt())))
     ) ?: return
     val chargevStyle = labelManager.addLabelStyles(
-        LabelStyles.from("pin_chargev_$styleId", LabelStyle.from(createCirclePinBitmap(0xFF3B82F6.toInt())))
+        LabelStyles.from("pin_chargev_$styleId", LabelStyle.from(cachedPinBitmap(0xFF3B82F6.toInt())))
     ) ?: return
     val unavailableStyle = labelManager.addLabelStyles(
-        LabelStyles.from("pin_unavail_$styleId", LabelStyle.from(createCirclePinBitmap(0xFF64748B.toInt())))
+        LabelStyles.from("pin_unavail_$styleId", LabelStyle.from(cachedPinBitmap(0xFF64748B.toInt())))
     ) ?: return
     val meStyle = labelManager.addLabelStyles(
         LabelStyles.from("pin_me_$styleId", LabelStyle.from(createMeLocationBitmap()))
@@ -316,7 +365,7 @@ private fun renderStations(
     fun addIndividual(index: Int, s: ChargerStation) {
         val options = LabelOptions.from("station_${s.statId}_$index", LatLng.from(s.lat, s.lng))
             .setStyles(styleFor(s))
-            .setTag(index) // 개별 핀: 인덱스로 ChargerStation 조회
+            .setTag(index) // 개별 핀: 인덱스로 ChargerStation 조회 (allValid 기준 인덱스)
             .setClickable(true)
         layer.addLabel(options)
     }
@@ -324,14 +373,14 @@ private fun renderStations(
     val zoom = try { map.cameraPosition?.zoomLevel ?: 12 } catch (e: Exception) { 12 }
     MapStationsHolder.lastZoomBucket = zoom
 
-    if (zoom >= CLUSTER_ZOOM_MAX || validStations.size <= 1) {
-        // 개별 마커
-        validStations.forEachIndexed { index, s -> addIndividual(index, s) }
+    if (zoom >= CLUSTER_ZOOM_MAX || visible.size <= 1) {
+        // 개별 마커 (화면 안만)
+        visible.forEach { (index, s) -> addIndividual(index, s) }
     } else {
-        // 격자 클러스터링: 셀당 1개면 개별, 2개 이상이면 개수 버블
+        // 격자 클러스터링: 셀당 1개면 개별, 2개 이상이면 개수 버블 (화면 안만)
         val cell = cellSizeForZoom(zoom)
         val groups = HashMap<Long, MutableList<Int>>()
-        validStations.forEachIndexed { i, s ->
+        visible.forEach { (i, s) ->
             val gx = Math.floor(s.lat / cell).toInt()
             val gy = Math.floor(s.lng / cell).toInt()
             val key = gx.toLong() * 1_000_000L + gy
@@ -340,14 +389,14 @@ private fun renderStations(
         var clusterSeq = 0
         groups.values.forEach { idxs ->
             if (idxs.size == 1) {
-                addIndividual(idxs[0], validStations[idxs[0]])
+                addIndividual(idxs[0], allValid[idxs[0]])
             } else {
-                val avgLat = idxs.sumOf { validStations[it].lat } / idxs.size
-                val avgLng = idxs.sumOf { validStations[it].lng } / idxs.size
-                val hasAvail = idxs.any { validStations[it].summary.available > 0 }
+                val avgLat = idxs.sumOf { allValid[it].lat } / idxs.size
+                val avgLng = idxs.sumOf { allValid[it].lng } / idxs.size
+                val hasAvail = idxs.any { allValid[it].summary.available > 0 }
                 val clusterId = "cluster_${styleId}_${clusterSeq++}"
                 val cStyle = labelManager.addLabelStyles(
-                    LabelStyles.from(clusterId, LabelStyle.from(createClusterBitmap(idxs.size, hasAvail)))
+                    LabelStyles.from(clusterId, LabelStyle.from(cachedClusterBitmap(idxs.size, hasAvail)))
                 ) ?: return@forEach
                 val opt = LabelOptions.from(clusterId, LatLng.from(avgLat, avgLng))
                     .setStyles(cStyle)
