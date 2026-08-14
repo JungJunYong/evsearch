@@ -16,6 +16,12 @@ services:
       ENCODED_SERVICE_KEY: ${ENCODED_SERVICE_KEY:-}
       # true 이면 KECO 실시간 API 호출, 아니면 mock 데이터 fallback
       USE_LIVE_API: ${USE_LIVE_API:-false}
+      # 빈자리 알림 FCM: 아래 volumes로 마운트한 서비스계정 키 경로
+      FIREBASE_SERVICE_ACCOUNT: /app/service-account.json
+    volumes:
+      # 서버의 bff/service-account.json 을 컨테이너에 읽기전용 마운트
+      # (이미지에 포함되지 않으며 git에도 올라가지 않음)
+      - ./service-account.json:/app/service-account.json:ro
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8084/health"]
       interval: 30s

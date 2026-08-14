@@ -8,3 +8,5 @@ dist
 Dockerfile
 docker-compose.yml
 README.md
+service-account.json
+*-firebase-adminsdk-*.json

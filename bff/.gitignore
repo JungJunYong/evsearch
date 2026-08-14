@@ -1,0 +1,4 @@
+
+# Firebase 서비스계정 키 (절대 커밋 금지)
+service-account.json
+*-firebase-adminsdk-*.json
