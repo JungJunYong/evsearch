@@ -120,6 +120,7 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
 
       // Store in memory for instant retrieval
       stationDetailMap.set(statId, stationObj);
+      allChargevStations.set(statId, stationObj);
       return stationObj;
     });
 
@@ -193,9 +194,38 @@ export async function getChargevByChargerNumber(cNum: string): Promise<ChargerSt
   }
 }
 
+// Global registry of all discovered ChargEV stations
+export const allChargevStations = new Map<string, ChargerStation>();
+
+export function getAllChargevStations(): ChargerStation[] {
+  return Array.from(allChargevStations.values());
+}
+
 /**
- * Lookup station detail by statId (e.g. CHARGEV_5637 or CHARGEV_CNUM_3586)
+ * Pre-warm ChargEV stations across major regions in Korea
+ */
+export async function warmupChargevStations(): Promise<void> {
+  const seedKeywords = [
+    '알프하임', '두산알프하임', '호평동', '평내동', '남양주', '다산', '별내', '화도',
+    '자이', '래미안', '힐스테이트', '푸르지오', '아이파크', '더샵', 'e편한세상', '롯데캐슬',
+    '강남', '서초', '송파', '마포', '서대문', '용산', '영등포', '노원',
+    '분당', '판교', '수지', '일산', '송도', '청라', '수원', '동탄',
+  ];
+
+  console.log('🚀 [ChargeV Warmup] Pre-indexing nationwide ChargEV apartment stations...');
+  for (const kw of seedKeywords) {
+    try {
+      await searchChargevStations(kw);
+    } catch {
+      // ignore individual failures
+    }
+  }
+  console.log(`✅ [ChargeV Warmup] Indexed ${allChargevStations.size} ChargEV apartment stations across Korea!`);
+}
+
+/**
+ * Lookup station detail by statId (e.g. CHARGEV_502616 or CHARGEV_CNUM_3586)
  */
 export function getChargevStationDetail(statId: string): ChargerStation | null {
-  return stationDetailMap.get(statId) || null;
+  return stationDetailMap.get(statId) || allChargevStations.get(statId) || null;
 }

@@ -16,7 +16,11 @@ import {
   RawKecoChargerItem,
   RawKecoApiResponse,
 } from '../types/ev.js';
-import { getChargevStationDetail } from './chargevService.js';
+import {
+  getChargevStationDetail,
+  getAllChargevStations,
+  warmupChargevStations,
+} from './chargevService.js';
 
 // 충전소 목록 캐시: stations 데이터는 10분(TTL 600초)
 // 충전기 실시간 상태 캐시: 상태 조회는 3분(TTL 180초)
@@ -29,6 +33,10 @@ const statusCache = new NodeCache({ stdTTL: 180, checkperiod: 30 });
 export async function initServerCacheWarmup(): Promise<void> {
   console.log('🚀 [BFF Server Warmup] Pre-caching nationwide stations into memory...');
   try {
+    // 1. Pre-warm ChargEV apartment stations across Korea
+    await warmupChargevStations();
+
+    // 2. Warm up public KECO + KEPCO stations
     const stations = await getStations(undefined, undefined, 1, 3000);
     console.log(`✅ [BFF Server Warmup] Nationwide station cache warm up complete! (${stations.length} stations ready)`);
   } catch (err) {
@@ -151,6 +159,16 @@ export async function getStations(
       }
     }
 
+    const chargevList = getAllChargevStations();
+    if (chargevList.length > 0) {
+      const existingIds = new Set(mockList.map((s) => s.statId));
+      for (const cv of chargevList) {
+        if (!existingIds.has(cv.statId)) {
+          mockList.push(cv);
+        }
+      }
+    }
+
     if (zcode) {
       return mockList.filter((s) => s.zcode === zcode);
     }
@@ -191,6 +209,17 @@ export async function getStations(
         console.log(`[BFF KEPCO] Enriched KEPCO stations`);
       } catch (err) {
         console.warn('[BFF KEPCO] Enrichment failed in live mode:', err);
+      }
+    }
+
+    // Merge nationwide pre-indexed ChargEV apartment stations
+    const chargevList = getAllChargevStations();
+    if (chargevList.length > 0) {
+      const existingIds = new Set(stations.map((s) => s.statId));
+      for (const cv of chargevList) {
+        if (!existingIds.has(cv.statId)) {
+          stations.push(cv);
+        }
       }
     }
 
