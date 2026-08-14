@@ -68,6 +68,7 @@ class ChargerWidget4x1 : GlanceAppWidget() {
         val componentName = ComponentName(context, MainActivity::class.java)
         val headerStationName = WidgetCommonUi.formatCleanName(chargers.firstOrNull()?.stationName ?: "EV 충전소", null)
         val availableCount = chargers.count { ChargerStatus.fromString(it.status) == ChargerStatus.AVAILABLE }
+        val lastFetched = chargers.firstOrNull()?.lastFetchedAt ?: ""
 
         Box(
             modifier = GlanceModifier
@@ -98,6 +99,17 @@ class ChargerWidget4x1 : GlanceAppWidget() {
                         maxLines = 1
                     )
                     Spacer(modifier = GlanceModifier.defaultWeight())
+                    // 업데이트 시각
+                    Text(
+                        text = WidgetCommonUi.formatTimeOnly(lastFetched),
+                        style = TextStyle(
+                            color = ColorProvider(day = Color(0xFF8595AC), night = Color(0xFF8595AC)),
+                            fontSize = 7.5.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        maxLines = 1
+                    )
+                    Spacer(modifier = GlanceModifier.width(6.dp))
                     Text(
                         text = "$availableCount/${chargers.size} 대기",
                         style = TextStyle(
