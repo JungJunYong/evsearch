@@ -74,7 +74,7 @@ class ChargerWidget4x1 : GlanceAppWidget() {
                 .fillMaxSize()
                 .background(ImageProvider(R.drawable.bg_widget_rounded))
                 .clickable(actionStartActivity(componentName))
-                .padding(horizontal = 9.dp, vertical = 6.dp)
+                .padding(horizontal = 6.dp, vertical = 4.dp)
         ) {
             Column(modifier = GlanceModifier.fillMaxSize()) {
                 // Top Mini Header
@@ -85,14 +85,14 @@ class ChargerWidget4x1 : GlanceAppWidget() {
                     Image(
                         provider = ImageProvider(R.drawable.ic_widget_bolt),
                         contentDescription = null,
-                        modifier = GlanceModifier.size(13.dp)
+                        modifier = GlanceModifier.size(11.dp)
                     )
                     Spacer(modifier = GlanceModifier.width(3.dp))
                     Text(
                         text = headerStationName,
                         style = TextStyle(
                             color = ColorProvider(day = Color(0xFF00E599), night = Color(0xFF00E599)),
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         ),
                         maxLines = 1
@@ -102,21 +102,21 @@ class ChargerWidget4x1 : GlanceAppWidget() {
                         text = "대기 $availableCount/${chargers.size}",
                         style = TextStyle(
                             color = ColorProvider(day = Color(0xFF00E599), night = Color(0xFF00E599)),
-                            fontSize = 9.sp,
+                            fontSize = 8.5.sp,
                             fontWeight = FontWeight.Bold
                         )
                     )
-                    Spacer(modifier = GlanceModifier.width(6.dp))
+                    Spacer(modifier = GlanceModifier.width(4.dp))
                     Image(
                         provider = ImageProvider(R.drawable.ic_widget_refresh),
                         contentDescription = "새로고침",
                         modifier = GlanceModifier
-                            .size(12.dp)
+                            .size(11.dp)
                             .clickable(actionRunCallback<RefreshActionCallback>())
                     )
                 }
 
-                Spacer(modifier = GlanceModifier.height(3.dp))
+                Spacer(modifier = GlanceModifier.height(2.dp))
 
                 // 1x6 Row (6 Columns Side-by-Side)
                 Row(
@@ -126,7 +126,7 @@ class ChargerWidget4x1 : GlanceAppWidget() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     chargers.forEachIndexed { index, charger ->
-                        if (index > 0) Spacer(modifier = GlanceModifier.width(3.dp))
+                        if (index > 0) Spacer(modifier = GlanceModifier.width(2.dp))
                         MiniCard1x6(
                             charger = charger,
                             modifier = GlanceModifier.defaultWeight().fillMaxHeight()
@@ -134,7 +134,7 @@ class ChargerWidget4x1 : GlanceAppWidget() {
                     }
                     val emptySlots = 6 - chargers.size
                     for (i in 0 until emptySlots) {
-                        Spacer(modifier = GlanceModifier.width(3.dp))
+                        Spacer(modifier = GlanceModifier.width(2.dp))
                         Spacer(modifier = GlanceModifier.defaultWeight())
                     }
                 }
@@ -154,7 +154,7 @@ class ChargerWidget4x1 : GlanceAppWidget() {
         Column(
             modifier = modifier
                 .background(ImageProvider(R.drawable.bg_widget_card_rounded))
-                .padding(horizontal = 3.dp, vertical = 3.dp),
+                .padding(horizontal = 1.dp, vertical = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -162,25 +162,26 @@ class ChargerWidget4x1 : GlanceAppWidget() {
                 text = mainTitle,
                 style = TextStyle(
                     color = ColorProvider(day = Color.White, night = Color.White),
-                    fontSize = 9.5.sp,
+                    fontSize = 8.sp,
                     fontWeight = FontWeight.Bold
                 ),
                 maxLines = 1
             )
-            Spacer(modifier = GlanceModifier.height(2.dp))
+            Spacer(modifier = GlanceModifier.height(1.dp))
             Row(
                 modifier = GlanceModifier
                     .background(ImageProvider(pillBgRes))
-                    .padding(horizontal = 3.5.dp, vertical = 1.5.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 2.dp, vertical = 0.5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                WidgetCommonUi.StatusDot(status = statusEnum, size = 4.5.dp)
-                Spacer(modifier = GlanceModifier.width(2.dp))
+                WidgetCommonUi.StatusDot(status = statusEnum, size = 3.5.dp)
+                Spacer(modifier = GlanceModifier.width(1.5.dp))
                 Text(
                     text = WidgetCommonUi.getStatusText(statusEnum),
                     style = TextStyle(
                         color = ColorProvider(day = pillTextColor, night = pillTextColor),
-                        fontSize = 8.sp,
+                        fontSize = 7.sp,
                         fontWeight = FontWeight.Bold
                     ),
                     maxLines = 1
@@ -732,13 +733,29 @@ object WidgetCommonUi {
 
     fun formatTimeOnly(isoString: String): String {
         return try {
-            if (isoString.contains("T")) {
+            if (isoString.isBlank()) return "최근"
+            val timePart = if (isoString.contains("T")) {
                 isoString.split("T")[1].substring(0, 5)
-            } else if (isoString.isBlank()) {
-                "최근"
+            } else if (isoString.contains(" ")) {
+                isoString.split(" ")[1].substring(0, 5)
+            } else if (isoString.length >= 5 && isoString.contains(":")) {
+                isoString.substring(0, 5)
             } else {
-                isoString
+                return "최근"
             }
+
+            val parts = timePart.split(":")
+            val hour = parts[0].toIntOrNull() ?: return timePart
+            val minute = parts[1].toIntOrNull() ?: return timePart
+
+            val amPm = if (hour < 12) "오전" else "오후"
+            val hour12 = when {
+                hour == 0 -> 12
+                hour > 12 -> hour - 12
+                else -> hour
+            }
+            val minuteFormatted = String.format("%02d", minute)
+            "$amPm $hour12:$minuteFormatted"
         } catch (e: Exception) {
             "최근"
         }
