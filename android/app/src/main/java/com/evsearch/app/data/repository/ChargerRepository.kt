@@ -91,6 +91,22 @@ class ChargerRepository(
         }
     }
 
+    suspend fun searchChargevStations(keyword: String): Result<List<ChargerStation>> {
+        if (keyword.isBlank()) return Result.success(emptyList())
+        return try {
+            val response = apiService.searchChargevStations(keyword)
+            if (response.success && response.data.isNotEmpty()) {
+                cacheStationsInMemory(response.data)
+                Result.success(response.data)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.success(emptyList())
+        }
+    }
+
     suspend fun getStationDetail(statId: String): Result<ChargerStation> {
         // 1. Instant check in memory cache (0ms delay!)
         inMemoryStationCache[statId]?.let {

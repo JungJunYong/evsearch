@@ -30,6 +30,16 @@ interface BffApiService {
         @Path("statId") statId: String
     ): BffStationDetailResponse
 
+    @GET("v1/stations/chargev/search")
+    suspend fun searchChargevStations(
+        @Query("keyword") keyword: String
+    ): BffStationsResponse
+
+    @GET("v1/stations/chargev/charger/{cNum}")
+    suspend fun getChargevByChargerNumber(
+        @Path("cNum") cNum: String
+    ): BffStationDetailResponse
+
     @POST("v1/stations/batch-status")
     suspend fun getBatchStatus(
         @Body request: BatchStatusRequest

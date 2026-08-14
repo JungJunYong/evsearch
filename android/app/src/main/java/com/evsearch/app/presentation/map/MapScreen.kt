@@ -199,7 +199,7 @@ fun MapScreen(
             ?: vp?.let { (it.minLng + it.maxLng) / 2 }
             ?: REGION_CODES.find { it.code == uiState.selectedZcode }?.lng
 
-        val filtered = if (vp == null) {
+        val filtered = if (vp == null || searchQuery.isNotBlank()) {
             filteredStations
         } else {
             filteredStations.filter { s ->
@@ -240,9 +240,34 @@ fun MapScreen(
             // Samsung One UI Continuous Curved Squircle Search Bar (28dp radius)
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("충전소 명칭 또는 주소 검색", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                onValueChange = {
+                    searchQuery = it
+                    viewModel.onSearchQueryChanged(it)
+                },
+                placeholder = { Text("충전소 명칭, 아파트명(자이, 래미안 등) 검색", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                trailingIcon = {
+                    when {
+                        uiState.isSearching -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        searchQuery.isNotBlank() -> {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "검색어 지우기",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.clickable {
+                                    searchQuery = ""
+                                    viewModel.onSearchQueryChanged("")
+                                }
+                            )
+                        }
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp),

@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.evsearch.app.data.model.ChargerStation
 import com.evsearch.app.data.repository.ChargerRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,11 +14,13 @@ import kotlinx.coroutines.launch
 
 data class MapUiState(
     val isLoading: Boolean = false,
+    val isSearching: Boolean = false,
     val selectedZcode: String = "all", // Default: Nationwide (전국)
     val selectedZcodeName: String = "전국",
     val stations: List<ChargerStation> = emptyList(),
     val errorMessage: String? = null,
-    val selectedStation: ChargerStation? = null
+    val selectedStation: ChargerStation? = null,
+    val searchQuery: String = ""
 )
 
 class MapViewModel(
@@ -29,6 +33,7 @@ class MapViewModel(
     // Client-side Memory Cache for Instant Region Switching & Map Browsing (0ms delay)
     private var nationwideMasterCache: List<ChargerStation>? = null
     private val regionCacheMap = mutableMapOf<String, List<ChargerStation>>()
+    private var searchJob: Job? = null
 
     init {
         loadStations("all", "전국")
@@ -41,6 +46,7 @@ class MapViewModel(
             if (cachedStations != null && cachedStations.isNotEmpty()) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
+                    isSearching = false,
                     selectedZcode = zcode,
                     selectedZcodeName = zcodeName,
                     stations = cachedStations,
@@ -51,7 +57,8 @@ class MapViewModel(
 
             // 2. Fetch from API only if not cached in memory
             _uiState.value = _uiState.value.copy(
-                isLoading = _uiState.value.stations.isEmpty(), // Only set loading if no stations displayed
+                isLoading = _uiState.value.stations.isEmpty(),
+                isSearching = false,
                 selectedZcode = zcode,
                 selectedZcodeName = zcodeName,
                 errorMessage = null
@@ -76,6 +83,43 @@ class MapViewModel(
                     errorMessage = if (_uiState.value.stations.isEmpty()) error.message else null
                 )
             }
+        }
+    }
+
+    fun onSearchQueryChanged(query: String) {
+        _uiState.value = _uiState.value.copy(searchQuery = query)
+        searchJob?.cancel()
+
+        if (query.isBlank()) {
+            val defaultStations = getCachedStations(_uiState.value.selectedZcode) ?: nationwideMasterCache ?: emptyList()
+            _uiState.value = _uiState.value.copy(
+                stations = defaultStations,
+                isSearching = false
+            )
+            return
+        }
+
+        searchJob = viewModelScope.launch {
+            delay(300) // Debounce 300ms
+            _uiState.value = _uiState.value.copy(isSearching = true)
+
+            // 1. Local filter
+            val allLocal = nationwideMasterCache ?: _uiState.value.stations
+            val localMatches = allLocal.filter {
+                it.name.contains(query, ignoreCase = true) || it.address.contains(query, ignoreCase = true)
+            }
+
+            // 2. Live ChargEV Search (Apartment & private stations)
+            val chargevResult = repository.searchChargevStations(query)
+            val chargevMatches = chargevResult.getOrDefault(emptyList())
+
+            // 3. Combined & deduplicated
+            val combined = (chargevMatches + localMatches).distinctBy { it.statId }
+
+            _uiState.value = _uiState.value.copy(
+                stations = if (combined.isNotEmpty()) combined else localMatches,
+                isSearching = false
+            )
         }
     }
 
