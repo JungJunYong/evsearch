@@ -4,8 +4,68 @@ import {
   getStationDetail,
   getChargerBatchStatus,
 } from '../services/kecoService.js';
+import {
+  searchChargevStations,
+  getChargevByChargerNumber,
+} from '../services/chargevService.js';
 
 export const stationRouter = Router();
+
+/**
+ * GET /v1/stations/chargev/search?keyword=래미안
+ */
+stationRouter.get('/chargev/search', async (req: Request, res: Response) => {
+  try {
+    const keyword = (req.query.keyword as string) || '';
+    const stations = await searchChargevStations(keyword);
+    res.json({
+      success: true,
+      count: stations.length,
+      data: stations,
+    });
+  } catch (error: any) {
+    console.error('Error in GET /v1/stations/chargev/search:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'CHARGEV_API_ERROR',
+        message: error.message || 'Failed to search ChargEV stations',
+      },
+    });
+  }
+});
+
+/**
+ * GET /v1/stations/chargev/charger/:cNum
+ */
+stationRouter.get('/chargev/charger/:cNum', async (req: Request, res: Response) => {
+  try {
+    const { cNum } = req.params;
+    const info = await getChargevByChargerNumber(cNum);
+    if (!info) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: `Charger with number ${cNum} not found`,
+        },
+      });
+    }
+    res.json({
+      success: true,
+      data: info,
+    });
+  } catch (error: any) {
+    console.error('Error in GET /v1/stations/chargev/charger/:cNum:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'CHARGEV_API_ERROR',
+        message: error.message || 'Failed to get charger info',
+      },
+    });
+  }
+});
 
 /**
  * GET /v1/stations

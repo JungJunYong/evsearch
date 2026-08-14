@@ -16,6 +16,7 @@ import {
   RawKecoChargerItem,
   RawKecoApiResponse,
 } from '../types/ev.js';
+import { getChargevStationDetail } from './chargevService.js';
 
 // 충전소 목록 캐시: stations 데이터는 10분(TTL 600초)
 // 충전기 실시간 상태 캐시: 상태 조회는 3분(TTL 180초)
@@ -202,6 +203,12 @@ export async function getStations(
 }
 
 export async function getStationDetail(statId: string, zcode?: string): Promise<ChargerStation | null> {
+  // Support ChargEV private apartment stations
+  if (statId.startsWith('CHARGEV_')) {
+    const chargevStation = getChargevStationDetail(statId);
+    if (chargevStation) return chargevStation;
+  }
+
   if (zcode) {
     const regional = await getStations(zcode);
     const foundRegional = regional.find((s) => s.statId === statId);
@@ -231,6 +238,23 @@ export async function getChargerBatchStatus(keys: Array<{ statId: string; chgerI
   const resultMap: Record<string, any> = {};
 
   for (const key of keys) {
+    // Support ChargEV apartment chargers
+    if (key.statId.startsWith('CHARGEV_')) {
+      const chargevStation = getChargevStationDetail(key.statId);
+      if (chargevStation) {
+        const chg = chargevStation.chargers.find((c) => c.chgerId === key.chgerId) || chargevStation.chargers[0];
+        resultMap[`${key.statId}:${key.chgerId}`] = {
+          statId: key.statId,
+          chgerId: key.chgerId,
+          status: chg?.status || 'AVAILABLE',
+          statusCode: chg?.statusCode || 2,
+          statusUpdatedAt: chg?.statusUpdatedAt || new Date().toISOString(),
+          fetchedAt: new Date().toISOString(),
+        };
+        continue;
+      }
+    }
+
     const station = mockList.find((s) => s.statId === key.statId);
     if (station) {
       const chg = station.chargers.find((c) => c.chgerId === key.chgerId) || station.chargers[0];

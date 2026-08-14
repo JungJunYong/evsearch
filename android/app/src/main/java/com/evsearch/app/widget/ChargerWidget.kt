@@ -12,11 +12,15 @@ import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
+import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.action.ActionCallback
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
@@ -35,9 +39,11 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.evsearch.app.MainActivity
 import com.evsearch.app.R
+import com.evsearch.app.data.api.BffApiService
 import com.evsearch.app.data.local.AppDatabase
 import com.evsearch.app.data.local.SavedChargerEntity
 import com.evsearch.app.data.model.ChargerStatus
+import com.evsearch.app.data.repository.ChargerRepository
 
 class ChargerWidget : GlanceAppWidget() {
 
@@ -46,7 +52,8 @@ class ChargerWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val db = AppDatabase.getInstance(context)
         val dbSaved = db.savedChargerDao().getAllSavedChargers()
-        val chargers = getDefaultChargersIfEmpty(dbSaved)
+        val hasSaved = dbSaved.isNotEmpty()
+        val chargers = if (hasSaved) dbSaved else getDefaultChargersIfEmpty(emptyList())
 
         provideContent {
             GlanceTheme {
@@ -54,6 +61,7 @@ class ChargerWidget : GlanceAppWidget() {
                 ChargerWidgetContent(
                     context = context,
                     chargers = chargers,
+                    hasSaved = hasSaved,
                     size = size
                 )
             }
@@ -64,6 +72,7 @@ class ChargerWidget : GlanceAppWidget() {
     private fun ChargerWidgetContent(
         context: Context,
         chargers: List<SavedChargerEntity>,
+        hasSaved: Boolean,
         size: DpSize
     ) {
         val componentName = ComponentName(context, MainActivity::class.java)
@@ -268,17 +277,19 @@ class ChargerWidget : GlanceAppWidget() {
 
             Spacer(modifier = GlanceModifier.height(6.dp))
 
-            // --- Footer ---
+            // --- Footer with Instant Refresh Action ---
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val lastFetched = chargers.firstOrNull()?.lastFetchedAt ?: ""
                 Text(
-                    text = "🔄 실시간 동기화",
+                    text = "🔄 ${formatTimeOnly(lastFetched)} 동기화",
                     style = TextStyle(
                         color = ColorProvider(day = Color(0xFF64748B), night = Color(0xFF64748B)),
                         fontSize = 9.sp
-                    )
+                    ),
+                    modifier = GlanceModifier.clickable(actionRunCallback<RefreshActionCallback>())
                 )
                 Spacer(modifier = GlanceModifier.defaultWeight())
                 Text(
@@ -419,18 +430,19 @@ class ChargerWidget : GlanceAppWidget() {
 
             Spacer(modifier = GlanceModifier.height(8.dp))
 
-            // --- Footer ---
+            // --- Footer with Instant Refresh Action ---
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val lastFetched = chargers.firstOrNull()?.lastFetchedAt ?: ""
                 Text(
-                    text = "🔄 자동 실시간 동기화 ${formatTimeOnly(lastFetched)}",
+                    text = "🔄 ${formatTimeOnly(lastFetched)} 동기화 (탭하여 갱신)",
                     style = TextStyle(
                         color = ColorProvider(day = Color(0xFF64748B), night = Color(0xFF64748B)),
                         fontSize = 10.sp
-                    )
+                    ),
+                    modifier = GlanceModifier.clickable(actionRunCallback<RefreshActionCallback>())
                 )
                 Spacer(modifier = GlanceModifier.defaultWeight())
                 Text(
@@ -585,11 +597,30 @@ class ChargerWidget : GlanceAppWidget() {
         return try {
             if (isoString.contains("T")) {
                 isoString.split("T")[1].substring(0, 5)
+            } else if (isoString.isBlank()) {
+                "최근"
             } else {
                 isoString
             }
         } catch (e: Exception) {
-            isoString
+            "최근"
         }
+    }
+}
+
+/**
+ * Glance ActionCallback for 1-Tap Manual Refresh on Home Widget
+ */
+class RefreshActionCallback : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        val db = AppDatabase.getInstance(context)
+        val apiService = BffApiService.create()
+        val repository = ChargerRepository(apiService, db.savedChargerDao(), context)
+        repository.refreshSavedChargersStatus()
+        ChargerWidget().updateAll(context)
     }
 }

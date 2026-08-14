@@ -31,3 +31,5 @@ log/
 # Temp
 .tmp/
 .temp/
+
+.genaidews/
