@@ -611,7 +611,9 @@ private fun SelectedStationSummaryCard(
                     color = statusColor.copy(alpha = 0.16f)
                 ) {
                     Text(
-                        text = "$statusText ${station.summary.available}/${station.summary.total}대",
+                        text = if (station.summary.total > 0)
+                            "$statusText ${station.summary.available}/${station.summary.total}대"
+                        else statusText,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = statusColor,
@@ -729,7 +731,11 @@ fun SamsungOneUIStationCard(
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
-                            text = if (isAvailable) "⚡ ${station.summary.available}/${station.summary.total} 가용" else "✕ 이용불가",
+                            text = when {
+                                isAvailable && station.summary.total > 0 -> "⚡ ${station.summary.available}/${station.summary.total} 가용"
+                                isAvailable -> "⚡ 충전 가능"
+                                else -> "✕ 이용불가"
+                            },
                             color = if (isAvailable) Color(0xFF00C896) else Color(0xFF94A3B8),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,

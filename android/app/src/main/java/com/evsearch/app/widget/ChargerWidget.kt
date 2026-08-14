@@ -202,42 +202,32 @@ class ChargerWidget4x1 : GlanceAppWidget() {
         }
 
         val statusColor = WidgetCommonUi.getPillTextColor(statusEnum)
-        Row(
-            modifier = modifier.background(ImageProvider(R.drawable.bg_widget_card_rounded)),
+        Column(
+            modifier = modifier
+                .background(ImageProvider(WidgetCommonUi.getCardBackground(statusEnum)))
+                .padding(horizontal = 2.dp, vertical = 3.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 상태색 좌측 바 (얇게)
-            Box(
-                modifier = GlanceModifier
-                    .width(3.dp)
-                    .fillMaxHeight()
-                    .background(ColorProvider(day = statusColor, night = statusColor))
-            ) {}
-            Column(
-                modifier = GlanceModifier.defaultWeight().padding(horizontal = 3.dp, vertical = 2.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = displayName,
-                    style = TextStyle(
-                        color = ColorProvider(day = Color.White, night = Color.White),
-                        fontSize = if (displayName.length > 5) 7.5.sp else 9.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    maxLines = 1
-                )
-                Spacer(modifier = GlanceModifier.height(2.dp))
-                Text(
-                    text = statusLabel,
-                    style = TextStyle(
-                        color = ColorProvider(day = statusColor, night = statusColor),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    maxLines = 1
-                )
-            }
+            Text(
+                text = displayName,
+                style = TextStyle(
+                    color = ColorProvider(day = Color.White, night = Color.White),
+                    fontSize = if (displayName.length > 5) 8.sp else 9.5.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                maxLines = 1
+            )
+            Spacer(modifier = GlanceModifier.height(3.dp))
+            Text(
+                text = statusLabel,
+                style = TextStyle(
+                    color = ColorProvider(day = statusColor, night = statusColor),
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                maxLines = 1
+            )
         }
     }
 }
@@ -402,51 +392,32 @@ class ChargerWidget4x2 : GlanceAppWidget() {
         val mainTitle = if (hasCustomName) charger.customName!! else terminalCode
         val subText = if (hasCustomName) "$terminalCode · ${charger.outputKw ?: "7"}kW" else "${WidgetCommonUi.formatCleanName(charger.stationName, null)} · ${charger.outputKw ?: "7"}kW"
 
-        Row(
-            modifier = modifier.background(ImageProvider(R.drawable.bg_widget_card_rounded)),
+        // 4x2는 카드 높이가 좁아 이름+상태 2줄로 (부가정보는 4x3/상세에서)
+        Column(
+            modifier = modifier
+                .background(ImageProvider(WidgetCommonUi.getCardBackground(statusEnum)))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 상태색 좌측 세로 바
-            Box(
-                modifier = GlanceModifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(ColorProvider(day = pillTextColor, night = pillTextColor))
-            ) {}
-            Column(
-                modifier = GlanceModifier.defaultWeight().padding(horizontal = 8.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = mainTitle,
-                    style = TextStyle(
-                        color = ColorProvider(day = Color.White, night = Color.White),
-                        fontSize = if (mainTitle.length > 7) 11.5.sp else 12.5.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    maxLines = 1
-                )
-                Spacer(modifier = GlanceModifier.height(3.dp))
-                Text(
-                    text = WidgetCommonUi.getStatusText(statusEnum),
-                    style = TextStyle(
-                        color = ColorProvider(day = pillTextColor, night = pillTextColor),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    maxLines = 1
-                )
-                Spacer(modifier = GlanceModifier.height(2.dp))
-                Text(
-                    text = subText,
-                    style = TextStyle(
-                        color = ColorProvider(day = Color(0xFF8595AC), night = Color(0xFF8595AC)),
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    maxLines = 1
-                )
-            }
+            Text(
+                text = mainTitle,
+                style = TextStyle(
+                    color = ColorProvider(day = Color.White, night = Color.White),
+                    fontSize = if (mainTitle.length > 7) 12.sp else 13.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                maxLines = 1
+            )
+            Spacer(modifier = GlanceModifier.height(4.dp))
+            Text(
+                text = WidgetCommonUi.getStatusText(statusEnum),
+                style = TextStyle(
+                    color = ColorProvider(day = pillTextColor, night = pillTextColor),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                maxLines = 1
+            )
         }
     }
 }
@@ -611,18 +582,11 @@ class ChargerWidget4x3 : GlanceAppWidget() {
         val subText = if (hasCustomName) "$terminalCode · ${charger.outputKw ?: "7"}kW" else "${WidgetCommonUi.formatCleanName(charger.stationName, null)} · ${charger.outputKw ?: "7"}kW"
 
         Row(
-            modifier = modifier.background(ImageProvider(R.drawable.bg_widget_card_rounded)),
+            modifier = modifier
+                .background(ImageProvider(WidgetCommonUi.getCardBackground(statusEnum)))
+                .padding(horizontal = 11.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 상태색 좌측 세로 바
-            Box(
-                modifier = GlanceModifier
-                    .width(4.dp)
-                    .fillMaxHeight()
-                    .background(ColorProvider(day = pillTextColor, night = pillTextColor))
-            ) {}
-            Spacer(modifier = GlanceModifier.width(8.dp))
-
             Column(
                 modifier = GlanceModifier.defaultWeight(),
                 verticalAlignment = Alignment.CenterVertically
@@ -631,7 +595,7 @@ class ChargerWidget4x3 : GlanceAppWidget() {
                     text = mainTitle,
                     style = TextStyle(
                         color = ColorProvider(day = Color.White, night = Color.White),
-                        fontSize = 12.5.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     ),
                     maxLines = 1
@@ -640,25 +604,23 @@ class ChargerWidget4x3 : GlanceAppWidget() {
                 Text(
                     text = subText,
                     style = TextStyle(
-                        color = ColorProvider(day = Color(0xFF8595AC), night = Color(0xFF8595AC)),
+                        color = ColorProvider(day = Color(0xFF94A3B8), night = Color(0xFF94A3B8)),
                         fontSize = 8.5.sp,
                         fontWeight = FontWeight.Medium
                     ),
                     maxLines = 1
                 )
             }
-
             Spacer(modifier = GlanceModifier.width(8.dp))
             // 상태 라벨 크게 (색상 강조)
             Text(
                 text = WidgetCommonUi.getStatusText(statusEnum),
                 style = TextStyle(
                     color = ColorProvider(day = pillTextColor, night = pillTextColor),
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 ),
-                maxLines = 1,
-                modifier = GlanceModifier.padding(end = 10.dp)
+                maxLines = 1
             )
         }
     }
@@ -741,6 +703,16 @@ object WidgetCommonUi {
             ChargerStatus.CHARGING -> R.drawable.bg_pill_charging
             ChargerStatus.COMM_ERROR, ChargerStatus.MAINTENANCE, ChargerStatus.SUSPENDED -> R.drawable.bg_pill_error
             else -> R.drawable.bg_pill_default
+        }
+    }
+
+    /** 상태색 카드 배경 (rounded 틴트 + stroke). */
+    fun getCardBackground(status: ChargerStatus): Int {
+        return when (status) {
+            ChargerStatus.AVAILABLE -> R.drawable.bg_card_available
+            ChargerStatus.CHARGING -> R.drawable.bg_card_charging
+            ChargerStatus.COMM_ERROR, ChargerStatus.MAINTENANCE, ChargerStatus.SUSPENDED -> R.drawable.bg_card_error
+            else -> R.drawable.bg_card_default
         }
     }
 
