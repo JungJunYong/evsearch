@@ -287,13 +287,25 @@ fun SamsungOneUIChargerItemCard(
     isPinned: Boolean,
     onPinClick: () -> Unit
 ) {
-    val isAvailable = charger.status == "AVAILABLE"
-    val isCharging = charger.status == "CHARGING"
+    val isAvailable = charger.status.equals("AVAILABLE", ignoreCase = true)
+    val isCharging = charger.status.equals("CHARGING", ignoreCase = true)
+    val isMaintenance = charger.status.equals("MAINTENANCE", ignoreCase = true)
+    val isCommError = charger.status.equals("COMM_ERROR", ignoreCase = true)
 
     val statusColor = when {
         isAvailable -> Color(0xFF00C896)
-        isCharging -> Color(0xFF2067F9)
-        else -> Color(0xFFFF4757)
+        isCharging -> Color(0xFF2563EB)
+        isMaintenance -> Color(0xFFFF4757)
+        isCommError -> Color(0xFFFF9F43)
+        else -> Color(0xFF94A3B8)
+    }
+
+    val (statusLabel, statusDesc) = when {
+        isAvailable -> "충전가능" to "지금 바로 충전 가능합니다"
+        isCharging -> "충전중" to "다른 차량이 충전 중입니다"
+        isMaintenance -> "점검/고장" to "기기 점검 중입니다"
+        isCommError -> "통신장애" to "통신 상태 확인 중"
+        else -> charger.displayStatusText to "실시간 상태 연동"
     }
 
     Card(
@@ -340,12 +352,29 @@ fun SamsungOneUIChargerItemCard(
                             .weight(1f)
                             .padding(end = 8.dp)
                     ) {
-                        Text(
-                            text = if (!charger.chargerCode.isNullOrBlank()) "충전기 [${charger.chargerCode}]" else "단말기 #${charger.chgerId}",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (!charger.chargerCode.isNullOrBlank()) "충전기 [${charger.chargerCode}]" else "단말기 #${charger.chgerId}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            // High-visibility status pill
+                            Surface(
+                                color = statusColor.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, statusColor.copy(alpha = 0.4f))
+                            ) {
+                                Text(
+                                    text = statusLabel,
+                                    color = statusColor,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                         charger.location?.let { loc ->
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
@@ -397,7 +426,7 @@ fun SamsungOneUIChargerItemCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Samsung One UI Status Indicator Bar (KEPCO real-time status)
+            // Samsung One UI Status Indicator Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -412,7 +441,7 @@ fun SamsungOneUIChargerItemCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = charger.kepcoStatusText,
+                        text = statusDesc,
                         color = statusColor,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
@@ -420,7 +449,7 @@ fun SamsungOneUIChargerItemCard(
                 }
 
                 Text(
-                    text = charger.cpStat?.let { "한전 코드 $it" } ?: "실시간 상태 수신",
+                    text = "실시간 연동",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
