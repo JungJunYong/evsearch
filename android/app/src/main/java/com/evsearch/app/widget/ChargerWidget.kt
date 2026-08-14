@@ -133,20 +133,20 @@ class ChargerWidget : GlanceAppWidget() {
     }
 
     // ==========================================
-    // 🎨 4x1 WIDGET (Compact Bar 2 Wide Items)
+    // 🎨 4x1 WIDGET (Compact Bar 2~3 Wide Items)
     // ==========================================
     @Composable
     private fun Widget4x1(chargers: List<SavedChargerEntity>) {
         Row(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Brand Logo Badge
             Row(
                 modifier = GlanceModifier
-                    .background(ColorProvider(day = Color(0xFF00C896).copy(alpha = 0.2f), night = Color(0xFF00C896).copy(alpha = 0.2f)))
+                    .background(ColorProvider(day = Color(0xFF00C896).copy(alpha = 0.15f), night = Color(0xFF00C896).copy(alpha = 0.15f)))
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -154,66 +154,66 @@ class ChargerWidget : GlanceAppWidget() {
                     text = "⚡ EV",
                     style = TextStyle(
                         color = ColorProvider(day = Color(0xFF00C896), night = Color(0xFF00C896)),
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
                 )
             }
 
-            Spacer(modifier = GlanceModifier.width(8.dp))
+            Spacer(modifier = GlanceModifier.width(6.dp))
 
             chargers.forEachIndexed { index, charger ->
                 if (index > 0) {
-                    Spacer(modifier = GlanceModifier.width(8.dp))
+                    Spacer(modifier = GlanceModifier.width(6.dp))
                 }
 
                 val statusEnum = ChargerStatus.fromString(charger.status)
                 val statusColor = getStatusColor(statusEnum)
-                val shortName = formatCleanName(charger.stationName, charger.customName)
+                val displayName = formatCleanName(charger.stationName, charger.customName)
                 val terminalText = if (charger.chgerId.length == 6) "${charger.chgerId.substring(0, 5)} ${charger.chgerId.substring(5)}" else "#${charger.chgerId}"
 
                 Row(
                     modifier = GlanceModifier
                         .defaultWeight()
                         .background(ImageProvider(R.drawable.bg_widget_card_rounded))
-                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     StatusDot(status = statusEnum)
-                    Spacer(modifier = GlanceModifier.width(6.dp))
+                    Spacer(modifier = GlanceModifier.width(5.dp))
                     Column(modifier = GlanceModifier.defaultWeight()) {
                         Text(
-                            text = shortName,
+                            text = displayName,
                             style = TextStyle(
                                 color = ColorProvider(day = Color.White, night = Color.White),
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             ),
                             maxLines = 1
                         )
                         Text(
-                            text = terminalText,
+                            text = "$terminalText · ${charger.outputKw ?: "7"}kW",
                             style = TextStyle(
                                 color = ColorProvider(day = Color(0xFF94A3B8), night = Color(0xFF94A3B8)),
-                                fontSize = 9.sp
+                                fontSize = 8.5.sp
                             ),
                             maxLines = 1
                         )
                     }
 
-                    Spacer(modifier = GlanceModifier.width(4.dp))
+                    Spacer(modifier = GlanceModifier.width(3.dp))
 
                     Row(
                         modifier = GlanceModifier
                             .background(ImageProvider(R.drawable.bg_widget_pill_rounded))
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                            .padding(horizontal = 5.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = getStatusText(statusEnum),
                             style = TextStyle(
                                 color = ColorProvider(day = statusColor, night = statusColor),
-                                fontSize = 10.sp,
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold
                             ),
                             maxLines = 1

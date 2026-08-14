@@ -86,11 +86,12 @@ class MapViewModel(
         }
     }
 
-    fun onSearchQueryChanged(query: String) {
-        _uiState.value = _uiState.value.copy(searchQuery = query)
+    fun performSearch(query: String) {
+        val trimmed = query.trim()
+        _uiState.value = _uiState.value.copy(searchQuery = trimmed)
         searchJob?.cancel()
 
-        if (query.isBlank()) {
+        if (trimmed.isBlank()) {
             val defaultStations = getCachedStations(_uiState.value.selectedZcode) ?: nationwideMasterCache ?: emptyList()
             _uiState.value = _uiState.value.copy(
                 stations = defaultStations,
@@ -100,17 +101,16 @@ class MapViewModel(
         }
 
         searchJob = viewModelScope.launch {
-            delay(300) // Debounce 300ms
             _uiState.value = _uiState.value.copy(isSearching = true)
 
             // 1. Local filter
             val allLocal = nationwideMasterCache ?: _uiState.value.stations
             val localMatches = allLocal.filter {
-                it.name.contains(query, ignoreCase = true) || it.address.contains(query, ignoreCase = true)
+                it.name.contains(trimmed, ignoreCase = true) || it.address.contains(trimmed, ignoreCase = true)
             }
 
             // 2. Live ChargEV Search (Apartment & private stations)
-            val chargevResult = repository.searchChargevStations(query)
+            val chargevResult = repository.searchChargevStations(trimmed)
             val chargevMatches = chargevResult.getOrDefault(emptyList())
 
             // 3. Combined & deduplicated
@@ -121,6 +121,16 @@ class MapViewModel(
                 isSearching = false
             )
         }
+    }
+
+    fun clearSearch() {
+        _uiState.value = _uiState.value.copy(searchQuery = "")
+        searchJob?.cancel()
+        val defaultStations = getCachedStations(_uiState.value.selectedZcode) ?: nationwideMasterCache ?: emptyList()
+        _uiState.value = _uiState.value.copy(
+            stations = defaultStations,
+            isSearching = false
+        )
     }
 
     private fun getCachedStations(zcode: String): List<ChargerStation>? {

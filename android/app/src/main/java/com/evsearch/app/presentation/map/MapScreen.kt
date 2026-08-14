@@ -30,12 +30,17 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -214,23 +219,45 @@ fun MapScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            val focusManager = LocalFocusManager.current
+
             // Samsung One UI Continuous Curved Squircle Search Bar (28dp radius)
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = {
                     searchQuery = it
-                    viewModel.onSearchQueryChanged(it)
+                    if (it.isBlank()) {
+                        viewModel.clearSearch()
+                    }
                 },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        focusManager.clearFocus()
+                        viewModel.performSearch(searchQuery)
+                    }
+                ),
                 placeholder = {
                     Text(
-                        text = "충전소명, 아파트명, 단말기 번호 검색",
+                        text = "충전소명, 아파트명, 단말기 번호 검색 (엔터로 검색)",
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                leadingIcon = {
+                    IconButton(onClick = {
+                        focusManager.clearFocus()
+                        viewModel.performSearch(searchQuery)
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "검색 실행",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
                 trailingIcon = {
                     when {
                         uiState.isSearching -> {
@@ -247,7 +274,7 @@ fun MapScreen(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.clickable {
                                     searchQuery = ""
-                                    viewModel.onSearchQueryChanged("")
+                                    viewModel.clearSearch()
                                     selectedStation = null
                                 }
                             )
