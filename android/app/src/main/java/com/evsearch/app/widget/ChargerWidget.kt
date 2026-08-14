@@ -26,6 +26,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -102,6 +103,9 @@ class ChargerWidget : GlanceAppWidget() {
         }
     }
 
+    // =========================================================================
+    // 🎨 1x6 WIDGET (1 Row x 6 Columns Side-by-Side Flagship Dashboard)
+    // =========================================================================
     @Composable
     private fun ChargerWidgetContent(
         context: Context,
@@ -139,7 +143,7 @@ class ChargerWidget : GlanceAppWidget() {
                     Row(
                         modifier = GlanceModifier
                             .background(ImageProvider(R.drawable.bg_pill_available))
-                            .padding(horizontal = 5.dp, vertical = 2.dp),
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -168,34 +172,29 @@ class ChargerWidget : GlanceAppWidget() {
 
                 Spacer(modifier = GlanceModifier.height(5.dp))
 
-                // --- 2. 6 Chargers (2 Columns x 3 Rows = 6 Beautiful Glass Cards) ---
-                val chunked = chargers.chunked(2)
-                chunked.forEachIndexed { rowIndex, rowList ->
-                    if (rowIndex > 0) {
-                        Spacer(modifier = GlanceModifier.height(3.dp))
+                // --- 2. 1x6 Horizontal Row (6 Mini-Cards Side-by-Side) ---
+                Row(
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .defaultWeight(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    chargers.forEachIndexed { index, charger ->
+                        if (index > 0) {
+                            Spacer(modifier = GlanceModifier.width(3.5.dp))
+                        }
+
+                        SingleRowMiniCard(
+                            charger = charger,
+                            modifier = GlanceModifier.defaultWeight()
+                        )
                     }
 
-                    Row(
-                        modifier = GlanceModifier
-                            .fillMaxWidth()
-                            .defaultWeight(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        rowList.forEachIndexed { colIndex, charger ->
-                            if (colIndex > 0) {
-                                Spacer(modifier = GlanceModifier.width(4.dp))
-                            }
-
-                            PremiumChargerCard(
-                                charger = charger,
-                                modifier = GlanceModifier.defaultWeight()
-                            )
-                        }
-
-                        if (rowList.size == 1) {
-                            Spacer(modifier = GlanceModifier.width(4.dp))
-                            Spacer(modifier = GlanceModifier.defaultWeight())
-                        }
+                    // Fill remaining slots if fewer than 6
+                    val emptySlots = 6 - chargers.size
+                    for (i in 0 until emptySlots) {
+                        Spacer(modifier = GlanceModifier.width(3.5.dp))
+                        Spacer(modifier = GlanceModifier.defaultWeight())
                     }
                 }
 
@@ -228,40 +227,38 @@ class ChargerWidget : GlanceAppWidget() {
         }
     }
 
-    // =====================================================================
-    // 🎨 프리미엄 충전기 카드 (One UI 다크 글래스 + 원형 LED + 네온 칩 뱃지)
-    // =====================================================================
+    // =========================================================================
+    // 🎨 1x6 전용 수직 미니 카드 (상단 번호, 중간 스펙, 하단 네온 뱃지)
+    // =========================================================================
     @Composable
-    private fun PremiumChargerCard(charger: SavedChargerEntity, modifier: GlanceModifier) {
+    private fun SingleRowMiniCard(charger: SavedChargerEntity, modifier: GlanceModifier) {
         val statusEnum = ChargerStatus.fromString(charger.status)
         val terminalCode = if (charger.chgerId.length == 6) "${charger.chgerId.substring(0, 5)} ${charger.chgerId.substring(5)}" else "#${charger.chgerId}"
         val pillBgRes = getStatusPillBackground(statusEnum)
         val pillTextColor = getStatusTextColor(statusEnum)
 
-        Row(
+        Column(
             modifier = modifier
+                .fillMaxHeight()
                 .background(ImageProvider(R.drawable.bg_widget_card_rounded))
-                .padding(horizontal = 7.dp, vertical = 3.dp),
+                .padding(horizontal = 3.dp, vertical = 5.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 🟢 원형 LED 상태 인디케이터
-            StatusDot(status = statusEnum)
-            Spacer(modifier = GlanceModifier.width(4.dp))
-
-            // 볼드 단말기 번호 (11050 8)
+            // Row 1: 단말기 번호 (11050 8)
             Text(
                 text = terminalCode,
                 style = TextStyle(
                     color = ColorProvider(day = Color.White, night = Color.White),
-                    fontSize = 10.sp,
+                    fontSize = 9.5.sp,
                     fontWeight = FontWeight.Bold
                 ),
                 maxLines = 1
             )
 
-            Spacer(modifier = GlanceModifier.width(3.dp))
+            Spacer(modifier = GlanceModifier.height(2.dp))
 
-            // 7kW 스펙
+            // Row 2: 7kW 스펙
             Text(
                 text = "${charger.outputKw ?: "7"}kW",
                 style = TextStyle(
@@ -272,20 +269,23 @@ class ChargerWidget : GlanceAppWidget() {
                 maxLines = 1
             )
 
-            Spacer(modifier = GlanceModifier.defaultWeight())
+            Spacer(modifier = GlanceModifier.height(4.dp))
 
-            // 네온 테두리 상태 뱃지 ([대기] / [충전중])
+            // Row 3: 네온 상태 뱃지 ([🟢 대기] / [🔵 충전])
             Row(
                 modifier = GlanceModifier
                     .background(ImageProvider(pillBgRes))
-                    .padding(horizontal = 5.dp, vertical = 1.5.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                StatusDot(status = statusEnum)
+                Spacer(modifier = GlanceModifier.width(2.5.dp))
                 Text(
                     text = getStatusText(statusEnum),
                     style = TextStyle(
                         color = ColorProvider(day = pillTextColor, night = pillTextColor),
-                        fontSize = 8.5.sp,
+                        fontSize = 8.sp,
                         fontWeight = FontWeight.Bold
                     ),
                     maxLines = 1
@@ -309,7 +309,7 @@ class ChargerWidget : GlanceAppWidget() {
         Image(
             provider = ImageProvider(iconRes),
             contentDescription = null,
-            modifier = GlanceModifier.size(6.dp)
+            modifier = GlanceModifier.size(5.5.dp)
         )
     }
 
@@ -337,7 +337,7 @@ class ChargerWidget : GlanceAppWidget() {
     private fun getStatusText(status: ChargerStatus): String {
         return when (status) {
             ChargerStatus.AVAILABLE -> "대기"
-            ChargerStatus.CHARGING -> "충전중"
+            ChargerStatus.CHARGING -> "충전"
             ChargerStatus.COMM_ERROR -> "장애"
             ChargerStatus.MAINTENANCE -> "점검"
             ChargerStatus.SUSPENDED -> "중지"
