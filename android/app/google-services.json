@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "675128746715",
+    "project_id": "evsearch-4259c",
+    "storage_bucket": "evsearch-4259c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:675128746715:android:85f0843dd7dda62b6ce2fe",
+        "android_client_info": {
+          "package_name": "com.evsearch.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAv4tY7wSBGFw0C6cZ7KaZMQhVh82BhCbQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
