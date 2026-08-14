@@ -22,8 +22,8 @@ class ChargerWidgetWorker(
             // Fetch fresh status from BFF
             val result = repository.refreshSavedChargersStatus()
 
-            // Update Glance Widget UI
-            ChargerWidget().updateAll(context)
+            // Update Glance Widget UI across all receivers
+            WidgetUpdateHelper.updateAllWidgets(context)
 
             if (result.isSuccess) {
                 Result.success()

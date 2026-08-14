@@ -152,7 +152,7 @@ class ChargerRepository(
         savedChargerDao.insertOrUpdate(entity)
 
         if (context != null) {
-            ChargerWidget().updateAll(context)
+            com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(context)
         }
     }
 
@@ -160,7 +160,7 @@ class ChargerRepository(
         savedChargerDao.deleteByKey(key)
 
         if (context != null) {
-            ChargerWidget().updateAll(context)
+            com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(context)
         }
     }
 
@@ -168,7 +168,7 @@ class ChargerRepository(
         savedChargerDao.updateCustomName(key, customName?.takeIf { it.isNotBlank() })
 
         if (context != null) {
-            ChargerWidget().updateAll(context)
+            com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(context)
         }
     }
 

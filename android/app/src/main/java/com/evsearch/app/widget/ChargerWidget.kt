@@ -376,6 +376,6 @@ class RefreshActionCallback : ActionCallback {
         val apiService = BffApiService.create()
         val repository = ChargerRepository(apiService, db.savedChargerDao(), context)
         repository.refreshSavedChargersStatus()
-        ChargerWidget().updateAll(context)
+        WidgetUpdateHelper.updateAllWidgets(context)
     }
 }

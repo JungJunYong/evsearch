@@ -35,7 +35,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -74,6 +76,10 @@ class MainActivity : ComponentActivity() {
 
         ChargerWidgetReceiver.scheduleBackgroundWork(applicationContext)
 
+        lifecycleScope.launch {
+            com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(applicationContext)
+        }
+
         val initialStatId = intent?.getStringExtra("statId")
 
         setContent {
@@ -88,6 +94,13 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lifecycleScope.launch {
+            com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(applicationContext)
         }
     }
 }
