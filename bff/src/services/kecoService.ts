@@ -21,6 +21,11 @@ import {
   getAllChargevStations,
   warmupChargevStations,
 } from './chargevService.js';
+import {
+  fetchAlfheimStatuses,
+  isAlfheimChargevStation,
+  matchingElecveryId,
+} from './elecveryService.js';
 
 // 충전소 목록 캐시: stations 데이터는 10분(TTL 600초)
 // 충전기 실시간 상태 캐시: 상태 조회는 3분(TTL 180초)
@@ -271,15 +276,35 @@ export async function getChargerBatchStatus(keys: Array<{ statId: string; chgerI
     if (key.statId.startsWith('CHARGEV_')) {
       const chargevStation = getChargevStationDetail(key.statId);
       if (chargevStation) {
-        const chg = chargevStation.chargers.find((c) => c.chgerId === key.chgerId) || chargevStation.chargers[0];
-        resultMap[`${key.statId}:${key.chgerId}`] = {
-          statId: key.statId,
-          chgerId: key.chgerId,
-          status: chg?.status || 'AVAILABLE',
-          statusCode: chg?.statusCode || 2,
-          statusUpdatedAt: chg?.statusUpdatedAt || new Date().toISOString(),
-          fetchedAt: new Date().toISOString(),
-        };
+        let liveStatus;
+        if (isAlfheimChargevStation(key.statId)) {
+          const elecveryStatuses = await fetchAlfheimStatuses();
+          const elecveryId = elecveryStatuses ? matchingElecveryId(key.chgerId, elecveryStatuses) : null;
+          liveStatus = elecveryId ? elecveryStatuses?.get(elecveryId) : undefined;
+        }
+
+        const chg = chargevStation.chargers.find((c) => c.chgerId === key.chgerId);
+        // A failed external lookup must not manufacture AVAILABLE or use the
+        // first charger as a substitute for the requested terminal.
+        if (liveStatus) {
+          resultMap[`${key.statId}:${key.chgerId}`] = {
+            statId: key.statId,
+            chgerId: key.chgerId,
+            status: liveStatus.status,
+            statusCode: liveStatus.statusCode,
+            statusUpdatedAt: liveStatus.fetchedAt,
+            fetchedAt: liveStatus.fetchedAt,
+          };
+        } else if (chg) {
+          resultMap[`${key.statId}:${key.chgerId}`] = {
+            statId: key.statId,
+            chgerId: key.chgerId,
+            status: chg.status,
+            statusCode: chg.statusCode,
+            statusUpdatedAt: chg.statusUpdatedAt,
+            fetchedAt: new Date().toISOString(),
+          };
+        }
         continue;
       }
     }
