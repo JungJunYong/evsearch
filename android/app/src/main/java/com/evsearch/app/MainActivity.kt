@@ -60,6 +60,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // 시스템 바(상태바/하단 제스처 영역)를 앱 다크 배경에 맞춘다 (밝은 아이콘)
+        val systemBarColor = android.graphics.Color.parseColor("#0A0E17")
+        window.statusBarColor = systemBarColor
+        window.navigationBarColor = systemBarColor
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
+
         // Initialize Kakao Maps SDK v2
         try {
             val appInfo = packageManager.getApplicationInfo(packageName, android.content.pm.PackageManager.GET_META_DATA)
