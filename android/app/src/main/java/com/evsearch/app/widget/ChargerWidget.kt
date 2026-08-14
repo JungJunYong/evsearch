@@ -122,11 +122,11 @@ class ChargerWidget : GlanceAppWidget() {
                 .clickable(actionStartActivity(componentName))
         ) {
             when {
-                // 4x1 (Small) - height < 120dp
-                size.height < 120.dp -> Widget4x1(chargers.take(2))
-                // 4x2 (Medium) - 120 ~ 210dp
-                size.height < 210.dp -> Widget4x2(chargers.take(4))
-                // 4x3 (Large) - 210dp+
+                // 4x1 (Small) - height < 110dp: Up to 3 chargers
+                size.height < 110.dp -> Widget4x1(chargers.take(3))
+                // 4x2 (Medium Standard) - 110 ~ 210dp: Up to 6 chargers (2x3 Grid)
+                size.height < 210.dp -> Widget4x2(chargers.take(6))
+                // 4x3 (Large Dashboard) - 210dp+: Up to 6 chargers (2x3 Grid)
                 else -> Widget4x3(chargers.take(6))
             }
         }
@@ -452,7 +452,7 @@ class ChargerWidget : GlanceAppWidget() {
             modifier = modifier
                 .fillMaxSize()
                 .background(ImageProvider(R.drawable.bg_widget_card_rounded))
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Row 1: [Dot] [Station Name] ── [Status Pill]
@@ -461,31 +461,31 @@ class ChargerWidget : GlanceAppWidget() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 StatusDot(status = statusEnum)
-                Spacer(modifier = GlanceModifier.width(6.dp))
+                Spacer(modifier = GlanceModifier.width(5.dp))
                 Text(
                     text = displayName,
                     style = TextStyle(
                         color = ColorProvider(day = Color.White, night = Color.White),
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     ),
                     maxLines = 1,
                     modifier = GlanceModifier.defaultWeight()
                 )
 
-                Spacer(modifier = GlanceModifier.width(4.dp))
+                Spacer(modifier = GlanceModifier.width(3.dp))
 
                 Row(
                     modifier = GlanceModifier
                         .background(ImageProvider(R.drawable.bg_widget_pill_rounded))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = getStatusText(statusEnum),
                         style = TextStyle(
                             color = ColorProvider(day = statusColor, night = statusColor),
-                            fontSize = 10.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold
                         ),
                         maxLines = 1
@@ -493,14 +493,14 @@ class ChargerWidget : GlanceAppWidget() {
                 }
             }
 
-            Spacer(modifier = GlanceModifier.height(3.dp))
+            Spacer(modifier = GlanceModifier.height(2.dp))
 
             // Row 2: [Terminal & kW Spec]
             Text(
                 text = spec,
                 style = TextStyle(
                     color = ColorProvider(day = Color(0xFF94A3B8), night = Color(0xFF94A3B8)),
-                    fontSize = 9.sp
+                    fontSize = 8.5.sp
                 ),
                 maxLines = 1
             )
