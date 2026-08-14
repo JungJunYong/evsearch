@@ -40,8 +40,9 @@ fun KakaoMapView(
     stations: List<ChargerStation>,
     centerLat: Double,
     centerLng: Double,
-    regionName: String,
+    regionName: String = "",
     userLocation: Pair<Double, Double>?,
+    focusLocation: Pair<Double, Double>? = null,
     onPinClick: (ChargerStation) -> Unit,
     onMapClick: () -> Unit,
     onViewportChanged: (Double, Double, Double, Double) -> Unit = { _, _, _, _ -> },
@@ -50,6 +51,7 @@ fun KakaoMapView(
     val lifecycleOwner = LocalLifecycleOwner.current
     var kakaoMap by remember { mutableStateOf<KakaoMap?>(null) }
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+    var isInitialCameraSet by remember { mutableStateOf(false) }
 
     // Compose 생명주기 -> MapView pause/resume 연동
     DisposableEffect(lifecycleOwner, mapViewRef) {
@@ -64,18 +66,38 @@ fun KakaoMapView(
         }
     }
 
-    // 외부 데이터 변경 시 지도 갱신 (카메라는 지역 변경 또는 내 위치 변경 시 이동)
-    DisposableEffect(stations, userLocation, centerLat, centerLng, kakaoMap) {
+    // 외부 데이터 변경 시 라벨 갱신 (카메라 위치는 불필요하게 초기화하지 않음)
+    DisposableEffect(stations, userLocation, kakaoMap) {
         val map = kakaoMap
         if (map != null) {
-            // 클릭 리스너가 참조할 최신 stations 저장
             MapStationsHolder.stations = stations
-            
-            // 내 위치가 있으면 내 위치로, 없으면 지역 중심으로 카메라 이동
-            val targetLat = userLocation?.first ?: centerLat
-            val targetLng = userLocation?.second ?: centerLng
-            map.moveCamera(CameraUpdateFactory.newCenterPosition(LatLng.from(targetLat, targetLng), 12))
             renderStations(map, stations, userLocation)
+
+            if (!isInitialCameraSet) {
+                isInitialCameraSet = true
+                val initialLat = userLocation?.first ?: centerLat
+                val initialLng = userLocation?.second ?: centerLng
+                map.moveCamera(CameraUpdateFactory.newCenterPosition(LatLng.from(initialLat, initialLng), 14))
+            }
+        }
+        onDispose {}
+    }
+
+    // 검색 결과 선택 또는 첫 번째 검색 매칭 위치로 부드럽게 카메라 이동
+    DisposableEffect(focusLocation, kakaoMap) {
+        val map = kakaoMap
+        if (map != null && focusLocation != null) {
+            val (lat, lng) = focusLocation
+            if (lat > 0.0 && lng > 0.0) {
+                try {
+                    map.moveCamera(
+                        CameraUpdateFactory.newCenterPosition(LatLng.from(lat, lng), 15),
+                        com.kakao.vectormap.camera.CameraAnimation.from(400, true, true)
+                    )
+                } catch (e: Exception) {
+                    map.moveCamera(CameraUpdateFactory.newCenterPosition(LatLng.from(lat, lng), 15))
+                }
+            }
         }
         onDispose {}
     }
