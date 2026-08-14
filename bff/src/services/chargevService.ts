@@ -129,51 +129,10 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
       // Try fetching live authenticated chargers dynamically from ChargEV API
       const dynamicChargers = await fetchDynamicChargersFromApi(item.es_key);
 
-      // Exact Doosan Alfheim real-world verified location mappings matching ChargEV master DB
-      const ALFHEIM_LOCATION_MAP: Record<string, string> = {
-        '110508': '105동 지하 1층 주차장 출입구 옆',
-        '110509': '105동 지하 1층 주차장 출입구 옆',
-        '110510': '105동 지하 1층 주차장 출입구 옆',
-        '110511': '105동 지하 1층 주차장 출입구 옆',
-        '110512': '109동 지하 1층 34번 기둥 뒤',
-        '110513': '109동 지하 1층 34번 기둥 뒤',
-        '110514': '109동 지하 1층 34번 기둥 뒤',
-        '110515': '109동 지하 1층 34번 기둥 뒤',
-        '110516': '115동 지하 1층 완속 충전구역',
-        '110517': '115동 지하 1층 완속 충전구역',
-        '110518': '115동 지하 1층 완속 충전구역',
-        '110519': '115동 지하 1층 완속 충전구역',
-        '110520': '115동 지하 1층 완속 충전구역',
-        '110521': '125동 지하 1층 주차장 출구 옆',
-        '110522': '125동 지하 1층 주차장 출구 옆',
-        '110523': '125동 지하 1층 주차장 출구 옆',
-        '110524': '125동 지하 1층 주차장 출구 옆',
-        '110525': '125동 지하 1층 주차장 출구 옆',
-        '110526': '108동 지하 2층 주차장 진입로',
-        '110527': '108동 지하 2층 주차장 진입로',
-        '110528': '108동 지하 2층 주차장 진입로',
-        '110529': '108동 지하 2층 주차장 진입로',
-        '110530': '108동 지하 2층 주차장 진입로',
-        '110531': '118동 지하 2층 엘리베이터 앞',
-        '110532': '118동 지하 2층 엘리베이터 앞',
-        '110533': '118동 지하 2층 엘리베이터 앞',
-        '110534': '118동 지하 2층 엘리베이터 앞',
-        '110535': '118동 지하 2층 엘리베이터 앞',
-        '110536': '118동 지하 2층 엘리베이터 앞',
-        '110537': '128동 지하 2층 중앙 통로',
-        '110538': '128동 지하 2층 중앙 통로',
-        '110539': '128동 지하 2층 중앙 통로',
-        '110540': '128동 지하 2층 중앙 통로',
-        '110541': '128동 지하 2층 중앙 통로',
-        '110542': '128동 지하 2층 중앙 통로',
-        '110543': '128동 지하 2층 중앙 통로',
-      };
-
       const fallbackChargers: Charger[] = Array.from({ length: numChargers }, (_, i) => {
         // Physical charger terminal hardware code from live ChargEV API (e.g. 110508 -> formatted as "11050 8", 110543 -> "11054 3")
         const rawCode = isAlfheim ? String(110508 + i) : `11${String(100 + (parseInt(item.es_key) % 800)).padStart(3, '0')}${String(i + 1).padStart(2, '0')}`;
         const formattedCode = rawCode.length === 6 ? `${rawCode.slice(0, 5)} ${rawCode.slice(5)}` : rawCode;
-        const locationDesc = isAlfheim ? ALFHEIM_LOCATION_MAP[rawCode] : undefined;
 
         // Real-time status distribution
         const isMaintenance = (i === 13);
@@ -185,7 +144,7 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
           statId,
           chgerId: rawCode,
           chargerCode: formattedCode,
-          location: locationDesc,
+          location: undefined,
           typeCode: '02',
           typeName: `AC완속 (7kW)`,
           outputKw: '7',
