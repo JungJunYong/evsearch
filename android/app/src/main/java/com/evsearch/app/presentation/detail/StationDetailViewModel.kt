@@ -58,7 +58,7 @@ class StationDetailViewModel(
 
     fun registerFirst6Chargers() {
         val station = _uiState.value.station ?: return
-        val chargersToSave = station.chargers.take(6)
+        val chargersToSave = station.chargers.sortedBy { it.chgerId }.take(6)
         viewModelScope.launch {
             chargersToSave.forEach { charger ->
                 repository.saveChargerToWidget(station, charger)
