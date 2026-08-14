@@ -91,10 +91,11 @@ class ChargerRepository(
         }
     }
 
-    suspend fun searchChargevStations(keyword: String): Result<List<ChargerStation>> {
+    /** 통합 검색: KECO + ChargEV를 BFF가 합쳐서 반환 (앱은 소스 구분 없이 사용). */
+    suspend fun searchStations(keyword: String): Result<List<ChargerStation>> {
         if (keyword.isBlank()) return Result.success(emptyList())
         return try {
-            val response = apiService.searchChargevStations(keyword)
+            val response = apiService.searchStations(keyword)
             if (response.success && response.data.isNotEmpty()) {
                 cacheStationsInMemory(response.data)
                 Result.success(response.data)
@@ -106,6 +107,67 @@ class ChargerRepository(
             Result.success(emptyList())
         }
     }
+
+    /** 통합 지도 마커: 화면 bounds 내 KECO + ChargEV 경량 마커 (클러스터링용). */
+    suspend fun getMapMarkers(
+        swLat: Double,
+        swLng: Double,
+        neLat: Double,
+        neLng: Double
+    ): Result<List<com.evsearch.app.data.model.StationMarker>> {
+        return try {
+            val response = apiService.getMapMarkers(swLat, swLng, neLat, neLng)
+            if (response.success) Result.success(response.data) else Result.success(emptyList())
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.success(emptyList())
+        }
+    }
+
+    /** 전국 ChargEV 마커를 지도 표시용 경량 ChargerStation 목록으로 변환. */
+    suspend fun getChargevPoiStations(): Result<List<ChargerStation>> {
+        return try {
+            val response = apiService.getChargevPoi()
+            if (response.success) {
+                val stations = response.data.map { m ->
+                    ChargerStation(
+                        statId = m.statId,
+                        name = m.name,
+                        address = "",
+                        addressDetail = null,
+                        lat = m.lat,
+                        lng = m.lng,
+                        useTime = null,
+                        operatorName = m.operatorName ?: "GS차지비 (ChargEV)",
+                        operatorCall = null,
+                        parkingFree = null,
+                        note = null,
+                        zcode = null,
+                        zscode = null,
+                        updatedAt = "",
+                        chargers = emptyList(),
+                        summary = com.evsearch.app.data.model.StationSummary(
+                            total = 0,
+                            available = if (m.available) 1 else 0,
+                            charging = 0,
+                            maintenance = if (m.available) 0 else 1,
+                            unknown = 0
+                        ),
+                        dataSource = "chargev-search"
+                    )
+                }
+                Result.success(stations)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.success(emptyList())
+        }
+    }
+
+    // 하위 호환: 기존 호출부가 남아있을 수 있어 유지 (내부적으로 통합 검색 사용)
+    suspend fun searchChargevStations(keyword: String): Result<List<ChargerStation>> = searchStations(keyword)
 
     suspend fun getStationDetail(statId: String): Result<ChargerStation> {
         // 1. Instant check in memory cache (0ms delay!)

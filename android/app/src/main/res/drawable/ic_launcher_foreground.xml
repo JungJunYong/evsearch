@@ -1,45 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon foreground: EV charging bolt inside a soft location pin, centered in the safe zone (keep art within the central 72x72 of 108). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Perfectly Round Circular Outer Badge (동글동글한 원형 뱃지) -->
+    <!-- Bolt drop shadow for contrast -->
     <path
-        android:fillColor="#00C896"
-        android:pathData="M 54, 12 A 42,42 0 1,0 54,96 A 42,42 0 1,0 54,12 Z" />
+        android:fillColor="#1F000000"
+        android:pathData="M60,33 L41,60 L53,60 L48,81 L69,52 L55,52 Z" />
 
-    <!-- Inner Soft Glowing Circle Layer -->
-    <path
-        android:fillColor="#14D9A3"
-        android:pathData="M 54, 16 A 38,38 0 1,0 54,92 A 38,38 0 1,0 54,16 Z" />
-
-    <!-- Circular Inner Gradient Ring -->
-    <path
-        android:fillColor="#059669"
-        android:pathData="M 54, 22 A 32,32 0 1,0 54,86 A 32,32 0 1,0 54,22 Z" />
-
-    <!-- Bright Central Core Circle -->
-    <path
-        android:fillColor="#047857"
-        android:pathData="M 54, 26 A 28,28 0 1,0 54,82 A 28,28 0 1,0 54,26 Z" />
-
-    <!-- Sleek Bold Lightning Bolt (EV Charger) -->
+    <!-- Main EV lightning bolt (white, bold, centered) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 57,26 L 40,54 L 52,54 L 46,82 L 68,48 L 54,48 Z" />
+        android:pathData="M59,32 L40,59 L52,59 L47,80 L68,51 L54,51 Z" />
 
-    <!-- Shiny Inner Highlight Sparkle -->
+    <!-- Bright highlight on the bolt's upper edge -->
     <path
         android:fillColor="#E8FDF7"
-        android:pathData="M 57,26 L 40,54 L 47,54 L 58,32 Z" />
-
-    <!-- Round Spark Dots (동글동글한 장식 도트) -->
-    <path
-        android:fillColor="#A7F3D0"
-        android:pathData="M 75, 25 A 3,3 0 1,0 75,31 A 3,3 0 1,0 75,25 Z" />
-
-    <path
-        android:fillColor="#A7F3D0"
-        android:pathData="M 33, 75 A 2.5,2.5 0 1,0 33,80 A 2.5,2.5 0 1,0 33,75 Z" />
+        android:pathData="M59,32 L40,59 L46,59 L57,37 Z" />
 </vector>

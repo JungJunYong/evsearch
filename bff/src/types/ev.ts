@@ -68,6 +68,9 @@ export interface Charger {
   isDeleted: boolean;
   location?: string;        // e.g. '105동 지하 1층 주차장 출입구 옆'
   chargerCode?: string;     // e.g. '11050-8' or physical terminal hardware number
+  // ChargEV enriched fields
+  price?: string;           // 단가 (원/kWh), e.g. '470'
+  priceType?: string;       // 단가 구분 (danga_type): 1:회원가 2:비회원가 등
   // KEPCO enriched fields
   chargeTp?: string;    // 1:완속, 2:급속
   cpStat?: string;      // 1:충전가능 2:충전중 3:고장/점검 4:통신장애 5:통신미연결 6:충전종료 7:계획정지
@@ -90,6 +93,10 @@ export interface ChargerStation {
   zscode?: string;
   updatedAt: string;
   chargers: Charger[];
+  // Data provenance (위조 재유입 방지: 실제 상류 응답에서 왔는지 명시)
+  dataSource?: 'chargev-nearby' | 'chargev-search' | 'keco' | 'mock' | 'none';
+  observedAt?: string;     // 상류(ChargEV/KECO) 관측 시각 (ISO). 위조 금지.
+  distanceKm?: number;     // nearbyStation 조회 좌표로부터의 거리
   // KEPCO enriched fields
   carType?: string;        // 지원차종 (콤마 구분)
   rapidCnt?: number;       // 급속충전기 대수

@@ -38,6 +38,9 @@ data class Charger(
     val isDeleted: Boolean,
     val location: String? = null,
     val chargerCode: String? = null,
+    // ChargEV enriched fields
+    val price: String? = null,       // 단가 (원/kWh)
+    val priceType: String? = null,   // 단가 구분 (1:회원가 2:비회원가)
     // KEPCO enriched fields
     val chargeTp: String? = null,    // "1" 완속, "2" 급속
     val cpStat: String? = null,      // "1" 가능, "2" 충전중, "3" 고장/점검, "4" 통신장애, "5" 미연결, "6" 종료, "7" 계획정지
@@ -109,10 +112,38 @@ data class ChargerStation(
     val chargers: List<Charger>,
     val summary: StationSummary,
     val distanceKm: Double? = null,
+    // Data provenance (BFF 통합: 소스 구분은 표시용, 처리 경로는 단일)
+    val dataSource: String? = null,  // chargev-nearby | chargev-search | keco | none
+    val observedAt: String? = null,
     // KEPCO enriched fields
     val carType: String? = null,     // 지원차종 (콤마 구분)
     val rapidCnt: Int? = null,       // 급속충전기 대수
     val slowCnt: Int? = null         // 완속충전기 대수
+) {
+    val isChargeV: Boolean
+        get() = dataSource?.startsWith("chargev") == true ||
+            statId.startsWith("CHARGEV_") ||
+            operatorName.contains("차지비") || operatorName.contains("ChargEV")
+}
+
+/** 지도 클러스터링용 경량 마커 (BFF /v1/stations/map, /chargev/poi). */
+data class StationMarker(
+    val statId: String,
+    val name: String,
+    val lat: Double,
+    val lng: Double,
+    val available: Boolean,
+    val operatorName: String? = null,
+    val source: String? = null       // "chargev" | "keco"
+) {
+    val isChargeV: Boolean
+        get() = source == "chargev" || statId.startsWith("CHARGEV_")
+}
+
+data class BffMapResponse(
+    val success: Boolean,
+    val count: Int,
+    val data: List<StationMarker>
 )
 
 data class BffStationsResponse(

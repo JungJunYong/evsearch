@@ -136,9 +136,21 @@ fun KakaoMapView(
                                         layer: com.kakao.vectormap.label.LabelLayer,
                                         label: com.kakao.vectormap.label.Label
                                     ) {
-                                        val index = label.tag as? Int
-                                        if (index != null && index in MapStationsHolder.stations.indices) {
-                                            onPinClick(MapStationsHolder.stations[index])
+                                        val tag = label.tag as? Int
+                                        when {
+                                            // 클러스터 버블: 해당 중심으로 줌인
+                                            tag == -1 -> {
+                                                val pos = MapStationsHolder.clusterPositions[label.labelId]
+                                                if (pos != null) {
+                                                    val nz = (MapStationsHolder.lastZoomBucket + 2).coerceIn(3, 16)
+                                                    kakaoMap.moveCamera(
+                                                        CameraUpdateFactory.newCenterPosition(pos, nz)
+                                                    )
+                                                }
+                                            }
+                                            // 개별 핀: 상세 카드
+                                            tag != null && tag in MapStationsHolder.stations.indices ->
+                                                onPinClick(MapStationsHolder.stations[tag])
                                         }
                                     }
                                 }
@@ -184,6 +196,14 @@ fun KakaoMapView(
                                         // 줌 레벨에 따른 대략적인 뷰포트 반경 계산
                                         // 줌 12 ≈ 0.05도, 줌 13 ≈ 0.025도 (반경 기준)
                                         val zoom = position.zoomLevel
+                                        // 줌 레벨이 바뀌면 클러스터/개별 표시를 다시 계산
+                                        if (zoom != MapStationsHolder.lastZoomBucket) {
+                                            renderStations(
+                                                kakaoMap,
+                                                MapStationsHolder.stations,
+                                                MapStationsHolder.userLocation
+                                            )
+                                        }
                                         val radiusDeg = when {
                                             zoom >= 15 -> 0.005
                                             zoom >= 14 -> 0.01
@@ -227,9 +247,25 @@ object MapZoomController {
     fun zoomOut() = kakaoMap?.moveCamera(CameraUpdateFactory.zoomOut())
 }
 
-/** 클릭 리스너가 최신 stations를 참조하도록 유지하는 홀더 */
+/** 클릭 리스너가 최신 stations/클러스터 상태를 참조하도록 유지하는 홀더 */
 object MapStationsHolder {
     var stations: List<ChargerStation> = emptyList()
+    var userLocation: Pair<Double, Double>? = null
+    var lastZoomBucket: Int = -1
+    val clusterPositions = HashMap<String, LatLng>()
+}
+
+/** 이 줌 레벨 이상에서는 개별 마커, 미만에서는 격자 클러스터링 */
+private const val CLUSTER_ZOOM_MAX = 15
+
+/** 줌 레벨별 격자 셀 크기(도). 줌이 낮을수록 넓게 묶는다. */
+private fun cellSizeForZoom(zoom: Int): Double = when {
+    zoom >= 14 -> 0.012
+    zoom >= 13 -> 0.025
+    zoom >= 12 -> 0.05
+    zoom >= 11 -> 0.1
+    zoom >= 9 -> 0.25
+    else -> 0.6
 }
 
 /**
@@ -244,8 +280,8 @@ private fun renderStations(
 ) {
     val validStations = stations.filter { it.lat > 0.0 && it.lng > 0.0 }
     MapStationsHolder.stations = validStations
+    MapStationsHolder.userLocation = userLocation
 
-    Log.d(TAG, "renderStations called: valid=${validStations.size}, total=${stations.size}, userLocation=$userLocation")
     val labelManager = map.labelManager ?: run {
         Log.e(TAG, "labelManager is null!")
         return
@@ -255,6 +291,7 @@ private fun renderStations(
         return
     }
     layer.removeAll()
+    MapStationsHolder.clusterPositions.clear()
 
     // 핀 스타일 등록 (ID에 타임스탬프를 붙여서 항상 새로 등록)
     val styleId = System.currentTimeMillis()
@@ -271,26 +308,54 @@ private fun renderStations(
         LabelStyles.from("pin_me_$styleId", LabelStyle.from(createMeLocationBitmap()))
     ) ?: return
 
-    Log.d(TAG, "Styles registered, adding ${validStations.size} labels")
-
-    // 충전소 핀 렌더링
-    validStations.forEachIndexed { index, station ->
-        val isAvailable = station.summary.available > 0
-        val isChargeV = station.operatorName?.contains("차지비") == true || station.statId.startsWith("CHARGEV_")
-        val chosenStyle = when {
-            isChargeV -> chargevStyle
-            isAvailable -> availableStyle
-            else -> unavailableStyle
-        }
-
-        val options = LabelOptions.from("station_${station.statId}_$index", LatLng.from(station.lat, station.lng))
-            .setStyles(chosenStyle)
-            .setTag(index) // 클릭 시 인덱스로 ChargerStation 조회
+    fun styleFor(s: ChargerStation) = when {
+        s.isChargeV -> chargevStyle
+        s.summary.available > 0 -> availableStyle
+        else -> unavailableStyle
+    }
+    fun addIndividual(index: Int, s: ChargerStation) {
+        val options = LabelOptions.from("station_${s.statId}_$index", LatLng.from(s.lat, s.lng))
+            .setStyles(styleFor(s))
+            .setTag(index) // 개별 핀: 인덱스로 ChargerStation 조회
             .setClickable(true)
+        layer.addLabel(options)
+    }
 
-        val label = layer.addLabel(options)
-        if (label == null) {
-            Log.e(TAG, "Failed to add label for station_$index")
+    val zoom = try { map.cameraPosition?.zoomLevel ?: 12 } catch (e: Exception) { 12 }
+    MapStationsHolder.lastZoomBucket = zoom
+
+    if (zoom >= CLUSTER_ZOOM_MAX || validStations.size <= 1) {
+        // 개별 마커
+        validStations.forEachIndexed { index, s -> addIndividual(index, s) }
+    } else {
+        // 격자 클러스터링: 셀당 1개면 개별, 2개 이상이면 개수 버블
+        val cell = cellSizeForZoom(zoom)
+        val groups = HashMap<Long, MutableList<Int>>()
+        validStations.forEachIndexed { i, s ->
+            val gx = Math.floor(s.lat / cell).toInt()
+            val gy = Math.floor(s.lng / cell).toInt()
+            val key = gx.toLong() * 1_000_000L + gy
+            groups.getOrPut(key) { mutableListOf() }.add(i)
+        }
+        var clusterSeq = 0
+        groups.values.forEach { idxs ->
+            if (idxs.size == 1) {
+                addIndividual(idxs[0], validStations[idxs[0]])
+            } else {
+                val avgLat = idxs.sumOf { validStations[it].lat } / idxs.size
+                val avgLng = idxs.sumOf { validStations[it].lng } / idxs.size
+                val hasAvail = idxs.any { validStations[it].summary.available > 0 }
+                val clusterId = "cluster_${styleId}_${clusterSeq++}"
+                val cStyle = labelManager.addLabelStyles(
+                    LabelStyles.from(clusterId, LabelStyle.from(createClusterBitmap(idxs.size, hasAvail)))
+                ) ?: return@forEach
+                val opt = LabelOptions.from(clusterId, LatLng.from(avgLat, avgLng))
+                    .setStyles(cStyle)
+                    .setTag(-1) // 클러스터 표시
+                    .setClickable(true)
+                layer.addLabel(opt)
+                MapStationsHolder.clusterPositions[clusterId] = LatLng.from(avgLat, avgLng)
+            }
         }
     }
 
@@ -300,6 +365,42 @@ private fun renderStations(
             .setStyles(meStyle)
         layer.addLabel(meOptions)
     }
+}
+
+/** 클러스터 개수 버블 비트맵 (개수·가용여부에 따라 크기/색상). */
+private fun createClusterBitmap(count: Int, hasAvailable: Boolean): Bitmap {
+    val radius = when {
+        count < 10 -> 34
+        count < 50 -> 42
+        count < 100 -> 50
+        else -> 58
+    }
+    val size = radius * 2 + 10
+    val center = size / 2f
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val main = if (hasAvailable) 0xFF00C896.toInt() else 0xFF64748B.toInt()
+
+    // 반투명 외곽 헤일로
+    val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = (main and 0x00FFFFFF) or 0x40000000 }
+    canvas.drawCircle(center, center, radius + 4f, halo)
+    // 흰색 링
+    val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
+    canvas.drawCircle(center, center, radius + 1.5f, ring)
+    // 메인 원
+    val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = main }
+    canvas.drawCircle(center, center, radius.toFloat(), fill)
+    // 개수 텍스트
+    val text = if (count >= 100) "99+" else count.toString()
+    val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFFFFF.toInt()
+        textAlign = Paint.Align.CENTER
+        textSize = radius * 0.85f
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+    val ty = center - (tp.descent() + tp.ascent()) / 2f
+    canvas.drawText(text, center, ty, tp)
+    return bitmap
 }
 
 /** 깔끔하고 선명한 고해상도 원형 마커 비트맵 생성 (외부 흰색 테두리 + 내부 고대비 컬러) */

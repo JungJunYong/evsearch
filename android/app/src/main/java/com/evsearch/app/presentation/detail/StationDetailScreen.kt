@@ -419,7 +419,12 @@ fun SamsungOneUIChargerItemCard(
                         Spacer(modifier = Modifier.height(2.dp))
                     }
                     Text(
-                        text = "${charger.outputKw ?: "7"}kW · ${charger.kepcoTypeText}",
+                        text = buildString {
+                            append("${charger.outputKw ?: "7"}kW · ${charger.kepcoTypeText}")
+                            charger.price?.takeIf { it.isNotBlank() }?.let { p ->
+                                append(" · ${p}원/kWh")
+                            }
+                        },
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

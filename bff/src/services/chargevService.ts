@@ -1,63 +1,256 @@
 import NodeCache from 'node-cache';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { ChargerStation, Charger, ChargerStatusType } from '../types/ev.js';
 
-// Cache station search results and details
-const chargevCache = new NodeCache({ stdTTL: 600, checkperiod: 60 });
-const stationDetailMap = new Map<string, ChargerStation>();
+/**
+ * ChargEV (GS차지비) 연동 서비스 — nearbyStation 단일 소스 (2026-08 재작성).
+ *
+ * 앱(com.lgntel.ngcharger) 트래픽을 에뮬레이터로 캡처해 확인한 결과, 지도는
+ * 로그인 없이 고정 시크릿 헤더(x-internal-token)만으로 POST /api/station/nearbyStation
+ * 을 호출하며, 응답에 충전소 + 충전기별 실시간 상태(충전가능/충전중/충전불가)가 전부 담긴다.
+ * 이전 버전의 위조 fallback / c_num 스캔 / Elecvery 스크래핑은 모두 폐기했다.
+ * 자세한 계약은 docs/CHARGEV_API.md 참조.
+ *
+ * 주의: nearbyStation 응답에는 충전소 절대 좌표(lat/lng)가 없고 distance만 있다.
+ * 좌표는 검색 API(GET /api/station/{keyword})가 제공하므로, es_key→좌표 매핑을
+ * 파일에 영속 캐시하여 지도 마커/위젯 상세 조회에 재사용한다.
+ */
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const CHARGEV_BASE_URL = 'https://app.gschargev.co.kr';
+// 앱↔게이트웨이 공유 정적 시크릿. 서버에서 회전될 수 있어 env로 오버라이드 가능.
+const INTERNAL_TOKEN = process.env.CHARGEV_INTERNAL_TOKEN || 'Allow-Access-9579364861794339';
 
-/**
- * Fetch dynamic charger list with location & real-time status when CHARGEV_TOKEN / CHARGEV_ID is set
- */
-async function fetchDynamicChargersFromApi(bid: string): Promise<Charger[] | null> {
-  const token = process.env.CHARGEV_TOKEN || process.env.CHARGEV_AUTH_TOKEN;
-  if (!token) return null;
+// 검색 결과(및 상세)를 짧게 캐시
+const chargevCache = new NodeCache({ stdTTL: 90, checkperiod: 30 });
 
+// es_key → 좌표/이름 영속 캐시 (검색 API로 학습, 지도/위젯이 재사용)
+interface StationCoord {
+  lat: number;
+  lng: number;
+  name?: string;
+  roadAddr?: string;
+  useType?: string;
+}
+const coordCache = new Map<string, StationCoord>();
+const COORDS_FILE = path.join(__dirname, '..', 'data', 'chargev_coords.json');
+
+// 전국 POI 좌표 인덱스 (poi/type/PI/new 로 시드). 이름은 없고 좌표/사용가능여부만.
+interface PoiEntry {
+  lat: number;
+  lng: number;
+  chargingAvailable: boolean; // charging_status 'Y'(가용 있음) / 'N'
+  useType?: string;
+}
+const poiCoords = new Map<string, PoiEntry>();
+
+/** 좌표 해석: 이름까지 있는 검색 캐시를 우선, 없으면 전국 POI 인덱스. */
+function resolveCoord(esKey: string): StationCoord | undefined {
+  const c = coordCache.get(esKey);
+  if (c && c.lat && c.lng) return c;
+  const p = poiCoords.get(esKey);
+  if (p && p.lat && p.lng) return { lat: p.lat, lng: p.lng, useType: p.useType };
+  return undefined;
+}
+
+function loadCoordCache(): void {
+  // 최소 seed: 실사용 중인 두산알프하임 (없으면 위젯이 재시작 직후에도 동작)
+  coordCache.set('502616', {
+    lat: 37.6522570064497,
+    lng: 127.253934074825,
+    name: '경기 남양주시 두산알프하임',
+    roadAddr: '경기 남양주시 백봉로 32',
+    useType: '2',
+  });
   try {
-    const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-    const res = await fetch(`${CHARGEV_BASE_URL}/api/station/chargerList`, {
-      method: 'POST',
-      headers: {
-        'User-Agent': 'Dart/3.0 (dart:io)',
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': authHeader,
-      },
-      body: JSON.stringify({ bid, payStatusNew: '', payStatusNewCd: '' }),
-      signal: AbortSignal.timeout(5000),
-    });
-
-    if (!res.ok) return null;
-    const json = (await res.json()) as any;
-    if (json.result !== '0000' || !Array.isArray(json.data) || json.data.length === 0) return null;
-
-    return json.data.map((c: any) => {
-      const cNum = c.c_num || c.cNum || c.charger_no || String(c.chger_id || '');
-      const rawCode = cNum || '01';
-      const formattedCode = rawCode.length === 6 ? `${rawCode.slice(0, 5)} ${rawCode.slice(5)}` : rawCode;
-      const location = c.location || c.charger_location || c.addr_detail || c.chger_location || undefined;
-      const isAvailable = c.charging_status === '0' || c.status === 'AVAILABLE' || c.stat === '2';
-      const isCharging = c.charging_status === '1' || c.status === 'CHARGING' || c.stat === '3';
-      const isMaintenance = c.charging_status === '2' || c.status === 'MAINTENANCE' || c.stat === '5';
-
-      return {
-        statId: `CHARGEV_${bid}`,
-        chgerId: rawCode,
-        chargerCode: formattedCode,
-        location: location,
-        typeCode: '02',
-        typeName: `AC완속 (${c.output_kw || '7'}kW)`,
-        outputKw: String(c.output_kw || '7'),
-        status: (isMaintenance ? 'MAINTENANCE' : (isCharging ? 'CHARGING' : 'AVAILABLE')) as ChargerStatusType,
-        statusCode: isMaintenance ? 5 : (isCharging ? 3 : 2),
-        statusUpdatedAt: new Date().toISOString(),
-        isDeleted: false,
-      };
-    });
+    if (fs.existsSync(COORDS_FILE)) {
+      const raw = JSON.parse(fs.readFileSync(COORDS_FILE, 'utf-8')) as Record<string, StationCoord>;
+      for (const [k, v] of Object.entries(raw)) coordCache.set(k, v);
+    }
   } catch (e) {
-    console.warn(`[ChargeV Service] Failed dynamic chargerList fetch for bid ${bid}:`, e);
-    return null;
+    console.warn('[ChargeV] coord cache load failed:', e);
+  }
+}
+
+let saveTimer: NodeJS.Timeout | null = null;
+function persistCoordCache(): void {
+  if (saveTimer) return; // debounce
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    try {
+      const obj: Record<string, StationCoord> = {};
+      for (const [k, v] of coordCache.entries()) obj[k] = v;
+      fs.mkdirSync(path.dirname(COORDS_FILE), { recursive: true });
+      fs.writeFileSync(COORDS_FILE, JSON.stringify(obj), 'utf-8');
+    } catch (e) {
+      console.warn('[ChargeV] coord cache persist failed:', e);
+    }
+  }, 2000);
+}
+
+function upsertCoord(esKey: string, c: StationCoord): void {
+  const key = String(esKey);
+  const prev = coordCache.get(key);
+  if (!prev || prev.lat !== c.lat || prev.lng !== c.lng || prev.name !== c.name) {
+    coordCache.set(key, c);
+    persistCoordCache();
+  }
+}
+
+loadCoordCache();
+
+// ---- 상태/필드 매핑 -------------------------------------------------------
+
+/** ChargEV charging_status_cd: 0=충전가능, 1=충전중, 2=충전불가 (에뮬 캡처로 확정) */
+function mapStatus(cd: unknown, label?: string): { status: ChargerStatusType; statusCode: number } {
+  switch (String(cd)) {
+    case '0':
+      return { status: 'AVAILABLE', statusCode: 2 };
+    case '1':
+      return { status: 'CHARGING', statusCode: 3 };
+    case '2':
+      // '충전불가' — 점검/오류/오프라인 통합. 도메인상 MAINTENANCE로 표기.
+      return { status: 'MAINTENANCE', statusCode: 5 };
+    default:
+      // 서버가 준 라벨이 '충전중'/'충전가능'이면 그것으로 보정
+      if (label === '충전중') return { status: 'CHARGING', statusCode: 3 };
+      if (label === '충전가능') return { status: 'AVAILABLE', statusCode: 2 };
+      if (label === '충전불가') return { status: 'MAINTENANCE', statusCode: 5 };
+      return { status: 'UNKNOWN', statusCode: 0 };
+  }
+}
+
+/** "2026-08-14 23:08:07" (KST) → ISO 문자열. 파싱 실패 시 undefined. */
+function parseKst(s: unknown): string | undefined {
+  if (!s || typeof s !== 'string') return undefined;
+  const d = new Date(s.replace(' ', 'T') + '+09:00');
+  return isNaN(d.getTime()) ? undefined : d.toISOString();
+}
+
+function formatChargerCode(cNum: string): string {
+  return cNum.length === 6 ? `${cNum.slice(0, 5)} ${cNum.slice(5)}` : cNum;
+}
+
+interface RawChargerListItem {
+  c_num?: string | number;
+  ec_key?: string | number;
+  local_area?: string;
+  charging_status?: string;
+  charging_status_cd?: string | number;
+  last_time?: string;
+  last_start_time?: string;
+  speed_nm?: string;
+  rated_kw?: string | number;
+  plug_type?: string;
+  danga?: string | number;
+  danga_type?: string | number;
+}
+
+interface RawNearbyStation {
+  es_key?: string | number;
+  station_name?: string;
+  distance?: string | number;
+  charger_list?: RawChargerListItem[];
+}
+
+function mapCharger(statId: string, item: RawChargerListItem, observedAt: string): Charger {
+  const { status, statusCode } = mapStatus(item.charging_status_cd, item.charging_status);
+  const cNum = String(item.c_num ?? '');
+  const kw = item.rated_kw != null ? String(item.rated_kw) : undefined;
+  const speed = item.speed_nm || '완속';
+  return {
+    statId,
+    chgerId: cNum,
+    chargerCode: formatChargerCode(cNum),
+    location: item.local_area || undefined,
+    typeCode: item.plug_type || '02',
+    typeName: kw ? `${speed} (${kw}kW)` : speed,
+    outputKw: kw,
+    status,
+    statusCode,
+    statusUpdatedAt: parseKst(item.last_time) || observedAt,
+    lastChargeStartedAt: parseKst(item.last_start_time),
+    isDeleted: false,
+    price: item.danga != null ? String(item.danga) : undefined,
+    priceType: item.danga_type != null ? String(item.danga_type) : undefined,
+  };
+}
+
+function summarize(chargers: Charger[]): ChargerStation['summary'] {
+  return {
+    total: chargers.length,
+    available: chargers.filter((c) => c.status === 'AVAILABLE').length,
+    charging: chargers.filter((c) => c.status === 'CHARGING').length,
+    maintenance: chargers.filter((c) => c.status === 'MAINTENANCE' || c.status === 'COMM_ERROR').length,
+    unknown: chargers.filter((c) => c.status === 'UNKNOWN').length,
+  };
+}
+
+function mapStation(raw: RawNearbyStation, observedAt: string, coord?: StationCoord): ChargerStation {
+  const esKey = String(raw.es_key ?? '');
+  const statId = `CHARGEV_${esKey}`;
+  const chargers = (raw.charger_list || []).map((c) => mapCharger(statId, c, observedAt));
+  const distanceKm = raw.distance != null ? parseFloat(String(raw.distance)) : undefined;
+  return {
+    statId,
+    name: raw.station_name || coord?.name || '',
+    address: coord?.roadAddr || '',
+    lat: coord?.lat ?? 0,
+    lng: coord?.lng ?? 0,
+    operatorName: 'GS차지비 (ChargEV)',
+    useTime: coord?.useType === '2' ? '입주민/회원 전용' : '충전소 운영시간 확인',
+    updatedAt: observedAt,
+    observedAt,
+    dataSource: 'chargev-nearby',
+    distanceKm: distanceKm != null && !isNaN(distanceKm) ? distanceKm : undefined,
+    chargers,
+    summary: summarize(chargers),
+  };
+}
+
+// ---- 상류 호출 ------------------------------------------------------------
+
+function nearbyHeaders(): Record<string, string> {
+  return {
+    'User-Agent': 'Dart/3.10 (dart:io)',
+    'x-internal-token': INTERNAL_TOKEN,
+    'co_div_cd': 'CODVC-1',
+    'x-os-name': 'aos',
+    'x-app-build': '225',
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
+}
+
+/** POST /api/station/nearbyStation → 원본 충전소 배열 (실패 시 []). */
+async function fetchNearbyRaw(lat: number, lng: number, limit: number): Promise<RawNearbyStation[]> {
+  try {
+    const res = await fetch(`${CHARGEV_BASE_URL}/api/station/nearbyStation`, {
+      method: 'POST',
+      headers: nearbyHeaders(),
+      body: JSON.stringify({
+        latitude: String(lat),
+        longitude: String(lng),
+        limit: String(limit),
+        mbrs_grp_id: null,
+        mbrs_grp_mapp_seq: null,
+      }),
+      signal: AbortSignal.timeout(7000),
+    });
+    if (!res.ok) {
+      console.warn(`[ChargeV] nearbyStation HTTP ${res.status}`);
+      return [];
+    }
+    const json = (await res.json()) as { result?: string; data?: RawNearbyStation[] };
+    // ChargEV는 실패도 HTTP 200 + result≠'0000'로 내려주므로 result로 판정한다.
+    if (json.result !== '0000' || !Array.isArray(json.data)) return [];
+    return json.data;
+  } catch (e) {
+    console.warn('[ChargeV] nearbyStation fetch failed:', e);
+    return [];
   }
 }
 
@@ -70,224 +263,262 @@ export interface ChargevStationItem {
   use_type: string;
 }
 
-export interface ChargevSearchResponse {
+interface ChargevSearchResponse {
   result: string;
   result_message: string;
   data: ChargevStationItem[];
 }
 
+interface RawPoi {
+  es_key?: string | number;
+  latitude?: string;
+  longitude?: string;
+  charging_status?: string;
+  use_type?: string;
+}
+
 /**
- * Search ChargEV stations by keyword (Apartment name, region, complex name, etc.)
- * e.g., '래미안', '자이', '힐스테이트', 'DMC파크뷰자이', 'GS타워'
+ * POST /api/station/poi/type/PI/new → 전국 ChargEV 충전소 좌표 인덱스.
+ * (es_key + lat/lng + charging_status Y/N). 이름/충전기 목록은 없다.
+ * x-internal-token 검증이 느슨해 값 무관하게 동작하나 앱과 동일 헤더를 붙인다.
  */
-export async function searchChargevStations(keyword: string): Promise<ChargerStation[]> {
-  if (!keyword || keyword.trim().length === 0) {
+async function fetchAllPoi(): Promise<RawPoi[]> {
+  try {
+    const res = await fetch(`${CHARGEV_BASE_URL}/api/station/poi/type/PI/new`, {
+      method: 'POST',
+      headers: nearbyHeaders(),
+      body: JSON.stringify({ bid_list: null, charging_status: 'N', plug_types: null, use_type: null }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as { result?: string; data?: { station_info_list?: RawPoi[] } };
+    if (json.result !== '0000' || !json.data?.station_info_list) return [];
+    return json.data.station_info_list;
+  } catch (e) {
+    console.warn('[ChargeV] poi/type fetch failed:', e);
     return [];
   }
+}
 
-  const trimmed = keyword.trim();
-  const cacheKey = `chargev_search_${trimmed}`;
-  const cached = chargevCache.get<ChargerStation[]>(cacheKey);
-  if (cached) {
-    return cached;
+/** 전국 POI 좌표를 poiCoords 캐시에 로드 (지도 마커/좌표 해석용). */
+async function loadPoiCoords(): Promise<number> {
+  const list = await fetchAllPoi();
+  for (const p of list) {
+    const esKey = String(p.es_key ?? '');
+    const lat = parseFloat(p.latitude || '') || 0;
+    const lng = parseFloat(p.longitude || '') || 0;
+    if (!esKey || !lat || !lng) continue;
+    poiCoords.set(esKey, {
+      lat,
+      lng,
+      chargingAvailable: p.charging_status === 'Y',
+      useType: p.use_type,
+    });
   }
+  return poiCoords.size;
+}
 
-  const encodedKeyword = encodeURIComponent(trimmed);
-  const url = `${CHARGEV_BASE_URL}/api/station/${encodedKeyword}`;
-
+/** GET /api/station/{keyword} → 좌표 포함 충전소 목록 (상태/충전기 없음). */
+async function fetchSearchRaw(keyword: string): Promise<ChargevStationItem[]> {
   try {
+    const url = `${CHARGEV_BASE_URL}/api/station/${encodeURIComponent(keyword)}`;
     const res = await fetch(url, {
       method: 'GET',
-      headers: {
-        'User-Agent': 'Dart/3.0 (dart:io)',
-        'Accept': 'application/json',
-      },
-      signal: AbortSignal.timeout(5000),
+      headers: { 'User-Agent': 'Dart/3.10 (dart:io)', Accept: 'application/json' },
+      signal: AbortSignal.timeout(6000),
     });
-
-    if (!res.ok) {
-      throw new Error(`ChargeV API returned HTTP ${res.status}`);
-    }
-
+    if (!res.ok) return [];
     const json = (await res.json()) as ChargevSearchResponse;
-    if (json.result !== '0000' || !Array.isArray(json.data)) {
-      return [];
-    }
+    if (json.result !== '0000' || !Array.isArray(json.data)) return [];
+    return json.data;
+  } catch (e) {
+    console.warn(`[ChargeV] search '${keyword}' failed:`, e);
+    return [];
+  }
+}
 
-    const stations: ChargerStation[] = await Promise.all(json.data.map(async (item) => {
-      const lat = parseFloat(item.latitude) || 0;
-      const lng = parseFloat(item.longitude) || 0;
-      const statId = `CHARGEV_${item.es_key}`;
+// ---- 공개 API -------------------------------------------------------------
 
-      // Dynamic realistic fleet size based on apartment complex scale
-      const isAlfheim = item.station_name.includes('알프하임');
-      const isMegaComplex = isAlfheim || item.station_name.includes('헬리오시티') || item.station_name.includes('그라시움') || item.station_name.includes('올림픽선수촌') || item.station_name.includes('파크뷰자이');
-      const isApartment = item.station_name.includes('아파트') || item.station_name.includes('자이') || item.station_name.includes('래미안') || item.station_name.includes('힐스테이트') || item.station_name.includes('푸르지오') || item.station_name.includes('더샵') || item.station_name.includes('아이파크');
+const MAX_SEARCH_ENRICH = 12; // 검색 결과 상위 N개만 실시간 보강 (상류 호출 절약)
 
-      const numChargers = isAlfheim ? 36 : (isMegaComplex ? 36 : (isApartment ? 20 : 8));
+/**
+ * 충전소명/주소 키워드 검색. 좌표를 캐시에 학습하고, 상위 결과는 각 좌표로
+ * nearbyStation을 호출해 실시간 충전기 목록까지 채워 반환한다.
+ */
+export async function searchChargevStations(keyword: string): Promise<ChargerStation[]> {
+  const trimmed = (keyword || '').trim();
+  if (!trimmed) return [];
 
-      // Try fetching live authenticated chargers dynamically from ChargEV API
-      const dynamicChargers = await fetchDynamicChargersFromApi(item.es_key);
+  const cacheKey = `search_${trimmed}`;
+  const cached = chargevCache.get<ChargerStation[]>(cacheKey);
+  if (cached) return cached;
 
-      const fallbackChargers: Charger[] = Array.from({ length: numChargers }, (_, i) => {
-        // Physical charger terminal hardware code from live ChargEV API (e.g. 110508 -> formatted as "11050 8", 110543 -> "11054 3")
-        const rawCode = isAlfheim ? String(110508 + i) : `11${String(100 + (parseInt(item.es_key) % 800)).padStart(3, '0')}${String(i + 1).padStart(2, '0')}`;
-        const formattedCode = rawCode.length === 6 ? `${rawCode.slice(0, 5)} ${rawCode.slice(5)}` : rawCode;
+  const items = await fetchSearchRaw(trimmed);
+  if (items.length === 0) return [];
 
-        // Real-time status distribution
-        const isMaintenance = (i === 13);
-        const isCharging = !isMaintenance && (i % 4 === 1 || i % 5 === 2);
-        const status = isMaintenance ? 'MAINTENANCE' : (isCharging ? 'CHARGING' : 'AVAILABLE');
-        const statusCode = isMaintenance ? 5 : (isCharging ? 3 : 2);
+  // 좌표 캐시 학습
+  const coordByKey = new Map<string, StationCoord>();
+  for (const it of items) {
+    const lat = parseFloat(it.latitude) || 0;
+    const lng = parseFloat(it.longitude) || 0;
+    const coord: StationCoord = { lat, lng, name: it.station_name, roadAddr: it.road_addr, useType: it.use_type };
+    coordByKey.set(String(it.es_key), coord);
+    if (lat && lng) upsertCoord(String(it.es_key), coord);
+  }
 
-        return {
-          statId,
-          chgerId: rawCode,
-          chargerCode: formattedCode,
-          location: undefined,
-          typeCode: '02',
-          typeName: `AC완속 (7kW)`,
-          outputKw: '7',
-          status,
-          statusCode,
-          statusUpdatedAt: new Date().toISOString(),
-          isDeleted: false,
-        };
-      });
+  const observedAt = new Date().toISOString();
+  const enrichList = items.slice(0, MAX_SEARCH_ENRICH);
 
-      const chargers: Charger[] = (dynamicChargers && dynamicChargers.length > 0) ? dynamicChargers : fallbackChargers;
-
-      const availableCount = chargers.filter((c) => c.status === 'AVAILABLE').length;
-      const chargingCount = chargers.filter((c) => c.status === 'CHARGING').length;
-      const errorCount = chargers.filter((c) => c.status === 'COMM_ERROR' || c.status === 'MAINTENANCE').length;
-
-      const stationObj: ChargerStation = {
-        statId,
-        name: item.station_name,
-        address: item.road_addr,
+  const enriched = await Promise.all(
+    enrichList.map(async (it): Promise<ChargerStation> => {
+      const esKey = String(it.es_key);
+      const coord = coordByKey.get(esKey);
+      const lat = coord?.lat || 0;
+      const lng = coord?.lng || 0;
+      if (lat && lng) {
+        const raw = await fetchNearbyRaw(lat, lng, 3);
+        const found = raw.find((s) => String(s.es_key) === esKey);
+        if (found) {
+          const st = mapStation(found, observedAt, coord);
+          st.dataSource = 'chargev-nearby';
+          return st;
+        }
+      }
+      // 실시간 조회 실패: 좌표/이름만, 충전기는 비움 (위조 금지)
+      return {
+        statId: `CHARGEV_${esKey}`,
+        name: it.station_name,
+        address: it.road_addr,
         lat,
         lng,
         operatorName: 'GS차지비 (ChargEV)',
-        useTime: item.use_type === '2' ? '입주민/회원 전용' : '24시간 운영',
-        updatedAt: new Date().toISOString(),
-        chargers,
-        summary: {
-          total: chargers.length,
-          available: availableCount,
-          charging: chargingCount,
-          maintenance: errorCount,
-          unknown: 0,
-        },
+        useTime: it.use_type === '2' ? '입주민/회원 전용' : '충전소 운영시간 확인',
+        updatedAt: observedAt,
+        observedAt,
+        dataSource: 'chargev-search',
+        chargers: [],
+        summary: { total: 0, available: 0, charging: 0, maintenance: 0, unknown: 0 },
       };
+    })
+  );
 
-      // Store in memory for instant retrieval
-      stationDetailMap.set(statId, stationObj);
-      allChargevStations.set(statId, stationObj);
-      return stationObj;
-    }));
-
-    chargevCache.set(cacheKey, stations);
-    return stations;
-  } catch (err) {
-    console.warn(`[ChargeV Service] Failed to search keyword '${keyword}':`, err);
-    return [];
-  }
+  chargevCache.set(cacheKey, enriched);
+  return enriched;
 }
 
 /**
- * Get station detail by charger number (c_num) printed on the charger
+ * 좌표 기반 주변 충전소 실시간 조회 (지도용). 절대 좌표는 좌표 캐시로 보강한다.
+ */
+export async function getNearbyChargevStations(
+  lat: number,
+  lng: number,
+  limit = 20
+): Promise<ChargerStation[]> {
+  const raw = await fetchNearbyRaw(lat, lng, limit);
+  if (raw.length === 0) return [];
+  const observedAt = new Date().toISOString();
+  return raw.map((s) => mapStation(s, observedAt, resolveCoord(String(s.es_key))));
+}
+
+/**
+ * statId(CHARGEV_{es_key})로 충전소 상세(실시간 충전기 목록) 조회.
+ * 좌표 캐시가 있어야 nearbyStation을 호출할 수 있다. 없으면 null.
+ */
+export async function getChargevStationDetail(statId: string): Promise<ChargerStation | null> {
+  const cacheKey = `detail_${statId}`;
+  const cached = chargevCache.get<ChargerStation>(cacheKey);
+  if (cached) return cached;
+
+  const esKey = statId.replace(/^CHARGEV_/, '');
+  const coord = resolveCoord(esKey);
+  if (!coord || !coord.lat || !coord.lng) return null;
+
+  const raw = await fetchNearbyRaw(coord.lat, coord.lng, 20);
+  const found = raw.find((s) => String(s.es_key) === esKey);
+  if (!found) return null;
+
+  const station = mapStation(found, new Date().toISOString(), coord);
+  chargevCache.set(cacheKey, station);
+  return station;
+}
+
+/**
+ * 충전기 물리번호(c_num)로 충전소를 역조회 (QR/현장번호 입력용).
+ * nearbyStation은 좌표 기반이라 c_num 역조회가 불가하므로, 공개
+ * GET /api/v2/chargerStation/{cNum} 로 station_name을 얻어 검색→상세로 잇는다.
  */
 export async function getChargevByChargerNumber(cNum: string): Promise<ChargerStation | null> {
-  const url = `${CHARGEV_BASE_URL}/api/v2/chargerStation/${encodeURIComponent(cNum)}`;
-
   try {
-    const res = await fetch(url, {
+    const res = await fetch(`${CHARGEV_BASE_URL}/api/v2/chargerStation/${encodeURIComponent(cNum)}`, {
       method: 'GET',
-      headers: {
-        'User-Agent': 'Dart/3.0 (dart:io)',
-        'Accept': 'application/json',
-      },
-      signal: AbortSignal.timeout(5000),
+      headers: { 'User-Agent': 'Dart/3.10 (dart:io)', Accept: 'application/json' },
+      signal: AbortSignal.timeout(6000),
     });
-
     if (!res.ok) return null;
-    const json = await res.json();
-    if (json.result === '0000' && json.data) {
-      const data = json.data;
-      const statId = `CHARGEV_CNUM_${data.c_num}`;
-      const station: ChargerStation = {
-        statId,
-        name: data.station_name,
-        address: data.road_addr,
-        lat: 0,
-        lng: 0,
-        operatorName: 'GS차지비 (ChargEV)',
-        useTime: '아파트 입주민 전용',
-        updatedAt: new Date().toISOString(),
-        chargers: [
-          {
-            statId,
-            chgerId: data.c_num,
-            typeCode: '02',
-            typeName: `완속 (${data.c_num}호기)`,
-            outputKw: '7',
-            status: 'AVAILABLE',
-            statusCode: 2,
-            statusUpdatedAt: new Date().toISOString(),
-            isDeleted: false,
-          },
-        ],
-        summary: {
-          total: 1,
-          available: 1,
-          charging: 0,
-          maintenance: 0,
-          unknown: 0,
-        },
-      };
+    const json = (await res.json()) as { result?: string; data?: { station_name?: string } };
+    if (json.result !== '0000' || !json.data?.station_name) return null;
 
-      stationDetailMap.set(statId, station);
-      return station;
-    }
-    return null;
-  } catch (err) {
-    console.warn(`[ChargeV Service] Failed to get charger number '${cNum}':`, err);
+    // station_name으로 검색 → 좌표 확보 → 그 충전소 상세(실시간) 반환
+    const stations = await searchChargevStations(json.data.station_name);
+    // c_num이 포함된 충전소를 우선 반환
+    const withCharger = stations.find((s) => s.chargers.some((c) => c.chgerId === String(cNum)));
+    return withCharger || stations[0] || null;
+  } catch (e) {
+    console.warn(`[ChargeV] getChargevByChargerNumber('${cNum}') failed:`, e);
     return null;
   }
 }
 
-// Global registry of all discovered ChargEV stations
-export const allChargevStations = new Map<string, ChargerStation>();
-
+/**
+ * 전국 ChargEV 충전소 지도 마커 목록 (poi/type 좌표 인덱스 기반).
+ * 충전기 목록은 없고 좌표 + 사용가능여부(Y/N)만 — 상세는 상세 조회로.
+ * summary.available: POI의 charging_status='Y'(가용 있음)를 1로 표기(대략치).
+ */
 export function getAllChargevStations(): ChargerStation[] {
-  return Array.from(allChargevStations.values());
-}
-
-/**
- * Pre-warm ChargEV stations across major regions in Korea
- */
-export async function warmupChargevStations(): Promise<void> {
-  const seedKeywords = [
-    '알프하임', '두산알프하임', '호평동', '평내동', '남양주', '다산', '별내', '화도',
-    '자이', '래미안', '힐스테이트', '푸르지오', '아이파크', '더샵', 'e편한세상', '롯데캐슬',
-    '강남', '서초', '송파', '마포', '서대문', '용산', '영등포', '노원',
-    '분당', '판교', '수지', '일산', '송도', '청라', '수원', '동탄',
-  ];
-
-  console.log('🚀 [ChargeV Warmup] Pre-indexing nationwide ChargEV apartment stations...');
-  for (const kw of seedKeywords) {
-    try {
-      await searchChargevStations(kw);
-    } catch {
-      // ignore individual failures
-    }
+  const observedAt = new Date().toISOString();
+  const out: ChargerStation[] = [];
+  for (const [esKey, p] of poiCoords.entries()) {
+    if (!p.lat || !p.lng) continue;
+    const named = coordCache.get(esKey);
+    out.push({
+      statId: `CHARGEV_${esKey}`,
+      name: named?.name || 'GS차지비 충전소',
+      address: named?.roadAddr || '',
+      lat: p.lat,
+      lng: p.lng,
+      operatorName: 'GS차지비 (ChargEV)',
+      useTime: p.useType === '2' ? '입주민/회원 전용' : '충전소 운영시간 확인',
+      updatedAt: observedAt,
+      observedAt,
+      dataSource: 'chargev-search',
+      chargers: [],
+      // 마커 색상용 대략치: 가용 있음(Y)이면 available=1, 아니면 0. 정확한 대수는 상세에서.
+      summary: {
+        total: 0,
+        available: p.chargingAvailable ? 1 : 0,
+        charging: 0,
+        maintenance: p.chargingAvailable ? 0 : 1,
+        unknown: 0,
+      },
+    });
   }
-  console.log(`✅ [ChargeV Warmup] Indexed ${allChargevStations.size} ChargEV apartment stations across Korea!`);
+  return out;
 }
 
-/**
- * Lookup station detail by statId (e.g. CHARGEV_502616 or CHARGEV_CNUM_3586)
- */
-export function getChargevStationDetail(statId: string): ChargerStation | null {
-  return stationDetailMap.get(statId) || allChargevStations.get(statId) || null;
+/** 서버 기동 시 전국 POI 좌표 인덱스를 로드 (지도/좌표 해석 기반). */
+export async function warmupChargevStations(): Promise<void> {
+  try {
+    const n = await loadPoiCoords();
+    console.log(`✅ [ChargeV Warmup] nationwide POI coords: ${n} stations`);
+  } catch (e) {
+    console.warn('[ChargeV Warmup] poi load failed:', e);
+  }
 }
+
+/** 주기적 POI 좌표 갱신 (선택). */
+export async function refreshChargevPoi(): Promise<number> {
+  return loadPoiCoords();
+}
+
+// 하위 호환용 (직접 사용처 없음, 과거 API 유지)
+export const allChargevStations = new Map<string, ChargerStation>();

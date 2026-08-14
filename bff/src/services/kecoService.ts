@@ -18,14 +18,8 @@ import {
 } from '../types/ev.js';
 import {
   getChargevStationDetail,
-  getAllChargevStations,
   warmupChargevStations,
 } from './chargevService.js';
-import {
-  fetchAlfheimStatuses,
-  isAlfheimChargevStation,
-  matchingElecveryId,
-} from './elecveryService.js';
 
 // 충전소 목록 캐시: stations 데이터는 10분(TTL 600초)
 // 충전기 실시간 상태 캐시: 상태 조회는 3분(TTL 180초)
@@ -164,16 +158,8 @@ export async function getStations(
       }
     }
 
-    const chargevList = getAllChargevStations();
-    if (chargevList.length > 0) {
-      const existingIds = new Set(mockList.map((s) => s.statId));
-      for (const cv of chargevList) {
-        if (!existingIds.has(cv.statId)) {
-          mockList.push(cv);
-        }
-      }
-    }
-
+    // ChargEV는 여기서 병합하지 않는다(전국 14k+ → 응답 폭증). 지도는 전용 경량
+    // 경로 GET /v1/stations/chargev/poi(전국 마커, 클러스터링용)로 분리한다.
     if (zcode) {
       return mockList.filter((s) => s.zcode === zcode);
     }
@@ -217,17 +203,7 @@ export async function getStations(
       }
     }
 
-    // Merge nationwide pre-indexed ChargEV apartment stations
-    const chargevList = getAllChargevStations();
-    if (chargevList.length > 0) {
-      const existingIds = new Set(stations.map((s) => s.statId));
-      for (const cv of chargevList) {
-        if (!existingIds.has(cv.statId)) {
-          stations.push(cv);
-        }
-      }
-    }
-
+    // ChargEV는 여기서 병합하지 않는다. 지도는 GET /v1/stations/chargev/poi 로 분리.
     stationsCache.set(cacheKey, stations);
     return stations;
   } catch (err) {
@@ -239,7 +215,7 @@ export async function getStations(
 export async function getStationDetail(statId: string, zcode?: string): Promise<ChargerStation | null> {
   // Support ChargEV private apartment stations
   if (statId.startsWith('CHARGEV_')) {
-    const chargevStation = getChargevStationDetail(statId);
+    const chargevStation = await getChargevStationDetail(statId);
     if (chargevStation) return chargevStation;
   }
 
@@ -272,37 +248,21 @@ export async function getChargerBatchStatus(keys: Array<{ statId: string; chgerI
   const resultMap: Record<string, any> = {};
 
   for (const key of keys) {
-    // Support ChargEV apartment chargers
+    // ChargEV 아파트 충전기: nearbyStation 실시간 데이터에서 해당 단말기(c_num)를 찾는다.
+    // (좌표 캐시가 있어야 조회 가능. 없거나 실패하면 위조하지 않고 건너뛴다 → 클라이언트는
+    //  Room의 마지막 정상 상태를 유지한다.)
     if (key.statId.startsWith('CHARGEV_')) {
-      const chargevStation = getChargevStationDetail(key.statId);
+      const chargevStation = await getChargevStationDetail(key.statId);
       if (chargevStation) {
-        let liveStatus;
-        if (isAlfheimChargevStation(key.statId)) {
-          const elecveryStatuses = await fetchAlfheimStatuses();
-          const elecveryId = elecveryStatuses ? matchingElecveryId(key.chgerId, elecveryStatuses) : null;
-          liveStatus = elecveryId ? elecveryStatuses?.get(elecveryId) : undefined;
-        }
-
         const chg = chargevStation.chargers.find((c) => c.chgerId === key.chgerId);
-        // A failed external lookup must not manufacture AVAILABLE or use the
-        // first charger as a substitute for the requested terminal.
-        if (liveStatus) {
-          resultMap[`${key.statId}:${key.chgerId}`] = {
-            statId: key.statId,
-            chgerId: key.chgerId,
-            status: liveStatus.status,
-            statusCode: liveStatus.statusCode,
-            statusUpdatedAt: liveStatus.fetchedAt,
-            fetchedAt: liveStatus.fetchedAt,
-          };
-        } else if (chg) {
+        if (chg) {
           resultMap[`${key.statId}:${key.chgerId}`] = {
             statId: key.statId,
             chgerId: key.chgerId,
             status: chg.status,
             statusCode: chg.statusCode,
             statusUpdatedAt: chg.statusUpdatedAt,
-            fetchedAt: new Date().toISOString(),
+            fetchedAt: chargevStation.observedAt || new Date().toISOString(),
           };
         }
         continue;

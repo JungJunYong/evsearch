@@ -3,6 +3,7 @@ package com.evsearch.app.data.api
 import com.evsearch.app.data.model.BffBatchStatusResponse
 import com.evsearch.app.data.model.BffStationDetailResponse
 import com.evsearch.app.data.model.BffStationsResponse
+import com.evsearch.app.data.model.BffMapResponse
 import com.evsearch.app.data.model.BatchStatusRequest
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
@@ -29,6 +30,25 @@ interface BffApiService {
     suspend fun getStationDetail(
         @Path("statId") statId: String
     ): BffStationDetailResponse
+
+    /** 통합 검색: KECO + ChargEV 단일 목록 (소스 구분은 dataSource). */
+    @GET("v1/stations/search")
+    suspend fun searchStations(
+        @Query("keyword") keyword: String
+    ): BffStationsResponse
+
+    /** 통합 지도 마커: bounds 내 KECO + ChargEV 경량 마커 (클러스터링용). */
+    @GET("v1/stations/map")
+    suspend fun getMapMarkers(
+        @Query("swLat") swLat: Double,
+        @Query("swLng") swLng: Double,
+        @Query("neLat") neLat: Double,
+        @Query("neLng") neLng: Double
+    ): BffMapResponse
+
+    /** 전국 ChargEV 경량 마커 (좌표 + 사용가능여부). 지도 클러스터링용. */
+    @GET("v1/stations/chargev/poi")
+    suspend fun getChargevPoi(): BffMapResponse
 
     @GET("v1/stations/chargev/search")
     suspend fun searchChargevStations(

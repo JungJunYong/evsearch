@@ -66,7 +66,17 @@ class MapViewModel(
 
             val targetZcode = if (zcode == "all") null else zcode
             val result = repository.getStations(zcode = targetZcode)
-            result.onSuccess { stations ->
+            result.onSuccess { kecoStations ->
+                // 지도 통합: KECO + 전국 ChargEV 마커를 합쳐 단일 목록으로 (소스 분기 없음).
+                // ChargEV 좌표는 클러스터링으로 렌더되므로 대량이어도 지도 부담이 적다.
+                val chargev = repository.getChargevPoiStations().getOrDefault(emptyList())
+                val stations = if (targetZcode == null) {
+                    (kecoStations + chargev).distinctBy { it.statId }
+                } else {
+                    // 지역 선택 시엔 해당 지역 KECO만 (ChargEV는 zcode가 없어 전국 표시)
+                    (kecoStations + chargev).distinctBy { it.statId }
+                }
+
                 if (zcode == "all" || targetZcode == null) {
                     nationwideMasterCache = stations
                 } else {
@@ -103,21 +113,17 @@ class MapViewModel(
         searchJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSearching = true)
 
-            // 1. Local filter
-            val allLocal = nationwideMasterCache ?: _uiState.value.stations
-            val localMatches = allLocal.filter {
+            // 통합 검색: KECO + ChargEV를 BFF가 합쳐서 반환 (소스 분기 없음)
+            val result = repository.searchStations(trimmed)
+            val matches = result.getOrDefault(emptyList())
+
+            // BFF 통합 결과가 비면 로컬 캐시 이름/주소 필터로 폴백 (오프라인 대비)
+            val fallback = (nationwideMasterCache ?: _uiState.value.stations).filter {
                 it.name.contains(trimmed, ignoreCase = true) || it.address.contains(trimmed, ignoreCase = true)
             }
 
-            // 2. Live ChargEV Search (Apartment & private stations)
-            val chargevResult = repository.searchChargevStations(trimmed)
-            val chargevMatches = chargevResult.getOrDefault(emptyList())
-
-            // 3. Combined & deduplicated
-            val combined = (chargevMatches + localMatches).distinctBy { it.statId }
-
             _uiState.value = _uiState.value.copy(
-                stations = if (combined.isNotEmpty()) combined else localMatches,
+                stations = if (matches.isNotEmpty()) matches else fallback,
                 isSearching = false
             )
         }
