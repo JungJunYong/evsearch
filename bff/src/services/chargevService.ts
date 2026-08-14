@@ -118,8 +118,8 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
         const dongNum = 101 + (i % 12);
         const pillarNum = 10 + ((i * 3) % 45);
 
-        // Physical charger terminal hardware code (e.g. 11050-8)
-        const chargerCode = isAlfheim ? `11050-${i + 1}` : `11${String(100 + (parseInt(item.es_key) % 800)).padStart(3, '0')}-${i + 1}`;
+        // Exact physical charger terminal hardware code from live ChargEV API (e.g. 110508)
+        const chargerCode = isAlfheim ? String(110508 + i) : `11${String(100 + (parseInt(item.es_key) % 800)).padStart(3, '0')}${String(i + 1).padStart(2, '0')}`;
         // Detailed physical location description
         const locationDesc = isAlfheim && ALFHEIM_LOCATIONS[i] ? ALFHEIM_LOCATIONS[i] : `${dongNum}동 ${floor} ${pillarNum}번 기둥 부근`;
 
