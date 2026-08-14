@@ -90,4 +90,13 @@ dependencies {
 
     // Kakao Maps v2
     implementation(libs.kakao.maps.v2)
+
+    // Firebase Cloud Messaging (빈자리 알림 푸시 수신)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
+}
+
+// google-services.json이 프로젝트에 있을 때만 FCM 플러그인 적용 (없어도 빌드 가능)
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }

@@ -66,6 +66,28 @@ class SavedChargersViewModel(
         }
     }
 
+    /** 빈자리 알림 켜기/갱신 (현재 즐겨찾기 단말기 대상). */
+    fun enableVacancyAlert(startMin: Int, endMin: Int) {
+        viewModelScope.launch {
+            if (_uiState.value.savedChargers.isEmpty()) {
+                _uiState.value = _uiState.value.copy(message = "먼저 위젯에 충전기를 등록해주세요.")
+                return@launch
+            }
+            val r = repository.subscribeVacancyAlert(startMin, endMin)
+            _uiState.value = _uiState.value.copy(
+                message = if (r.isSuccess) "빈자리 알림을 켰습니다." else "알림 설정 실패: ${r.exceptionOrNull()?.message}"
+            )
+        }
+    }
+
+    /** 빈자리 알림 끄기. */
+    fun disableVacancyAlert() {
+        viewModelScope.launch {
+            repository.unsubscribeVacancyAlert()
+            _uiState.value = _uiState.value.copy(message = "빈자리 알림을 껐습니다.")
+        }
+    }
+
     fun clearMessage() {
         _uiState.value = _uiState.value.copy(message = null)
     }

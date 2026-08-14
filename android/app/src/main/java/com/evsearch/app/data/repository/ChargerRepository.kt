@@ -234,6 +234,48 @@ class ChargerRepository(
         }
     }
 
+    /** FCM 등록 토큰 획득 (Firebase 미설정 시 null). */
+    private suspend fun fcmToken(): String? = kotlin.coroutines.suspendCoroutine { cont ->
+        try {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { cont.resumeWith(Result.success(it)) }
+                .addOnFailureListener { cont.resumeWith(Result.success(null)) }
+        } catch (e: Exception) {
+            cont.resumeWith(Result.success(null))
+        }
+    }
+
+    /** 빈자리 알림 구독/갱신: 현재 즐겨찾기 단말기를 대상으로 등록. */
+    suspend fun subscribeVacancyAlert(startMin: Int, endMin: Int, intervalSec: Int = 90): Result<Unit> {
+        return try {
+            val ctx = context ?: return Result.failure(Exception("context 없음"))
+            val token = fcmToken() ?: return Result.failure(Exception("FCM 토큰을 가져올 수 없습니다 (Firebase 설정 확인)"))
+            com.evsearch.app.alert.AlertPrefs.setToken(ctx, token)
+            val saved = savedChargerDao.getAllSavedChargers()
+            val keys = saved.map { com.evsearch.app.data.model.BatchStatusKey(it.statId, it.chgerId) }
+            apiService.subscribeAlert(
+                com.evsearch.app.data.model.AlertSubscribeRequest(token, keys, startMin, endMin, intervalSec, true)
+            )
+            Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    /** 빈자리 알림 해제. */
+    suspend fun unsubscribeVacancyAlert(): Result<Unit> {
+        return try {
+            val ctx = context ?: return Result.success(Unit)
+            val token = com.evsearch.app.alert.AlertPrefs.getToken(ctx) ?: fcmToken() ?: return Result.success(Unit)
+            apiService.unsubscribeAlert(com.evsearch.app.data.model.AlertUnsubscribeRequest(token))
+            Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
     suspend fun refreshSavedChargersStatus(): Result<Unit> {
         val saved = savedChargerDao.getAllSavedChargers()
         if (saved.isEmpty()) return Result.success(Unit)

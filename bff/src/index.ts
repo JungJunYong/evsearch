@@ -4,7 +4,9 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { stationRouter } from './routes/stationRoutes.js';
+import { alertRouter } from './routes/alertRoutes.js';
 import { initServerCacheWarmup } from './services/kecoService.js';
+import { startAlertPolling } from './services/alertService.js';
 
 // Load .env from root or bff directory
 const __filename = fileURLToPath(import.meta.url);
@@ -41,9 +43,12 @@ app.get('/health', (req, res) => {
 
 // Protect API routes with API Key middleware
 app.use('/v1/stations', apiKeyAuthMiddleware, stationRouter);
+app.use('/v1/alerts', apiKeyAuthMiddleware, alertRouter);
 
 app.listen(PORT, () => {
   console.log(`⚡ EV Search BFF API Server running on http://localhost:${PORT}`);
   // Start server cache warmup and periodic background refresh
   initServerCacheWarmup();
+  // Start vacancy-alert polling (server-driven FCM push)
+  startAlertPolling();
 });

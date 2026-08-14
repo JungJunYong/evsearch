@@ -65,6 +65,17 @@ interface BffApiService {
         @Body request: BatchStatusRequest
     ): BffBatchStatusResponse
 
+    // ── 빈자리 알림 구독 ──
+    @POST("v1/alerts/subscribe")
+    suspend fun subscribeAlert(
+        @Body request: com.evsearch.app.data.model.AlertSubscribeRequest
+    ): com.evsearch.app.data.model.SimpleResponse
+
+    @POST("v1/alerts/unsubscribe")
+    suspend fun unsubscribeAlert(
+        @Body request: com.evsearch.app.data.model.AlertUnsubscribeRequest
+    ): com.evsearch.app.data.model.SimpleResponse
+
     companion object {
         // Production Live API Server (evsearch.wiqio.com)
         private const val BASE_URL = "https://evsearch.wiqio.com/"

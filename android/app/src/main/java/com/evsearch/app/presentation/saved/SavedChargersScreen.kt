@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,10 +35,21 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import android.Manifest
+import android.app.TimePickerDialog
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import com.evsearch.app.alert.AlertPrefs
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -132,7 +144,10 @@ fun SavedChargersScreen(
                             .padding(horizontal = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        item { Spacer(modifier = Modifier.height(2.dp)) }
+                        item {
+                            VacancyAlertCard(viewModel = viewModel)
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
                         items(uiState.savedChargers, key = { it.key }) { charger ->
                             OneUI9SavedChargerCard(
                                 charger = charger,
@@ -414,6 +429,105 @@ private fun EmptySavedChargersContent() {
             lineHeight = 19.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
+}
+
+/** 빈자리 알림 설정 카드: 토글 + 감시 시간대 (FCM 서버 푸시). */
+@Composable
+private fun VacancyAlertCard(viewModel: SavedChargersViewModel) {
+    val ctx = LocalContext.current
+    var enabled by remember { mutableStateOf(AlertPrefs.getEnabled(ctx)) }
+    var startMin by remember { mutableStateOf(AlertPrefs.getStartMin(ctx)) }
+    var endMin by remember { mutableStateOf(AlertPrefs.getEndMin(ctx)) }
+
+    fun fmt(m: Int): String = "%02d:%02d".format(m / 60, m % 60)
+
+    fun applyEnable() {
+        AlertPrefs.setEnabled(ctx, true)
+        AlertPrefs.setStartMin(ctx, startMin)
+        AlertPrefs.setEndMin(ctx, endMin)
+        enabled = true
+        viewModel.enableVacancyAlert(startMin, endMin)
+    }
+    val permLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) applyEnable() }
+
+    fun requestEnable() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else applyEnable()
+    }
+    fun disable() {
+        AlertPrefs.setEnabled(ctx, false); enabled = false; viewModel.disableVacancyAlert()
+    }
+    fun pick(initial: Int, onPicked: (Int) -> Unit) {
+        TimePickerDialog(ctx, { _, h, m -> onPicked(h * 60 + m) }, initial / 60, initial % 60, true).show()
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = CircleShape, color = Color(0xFF00C896).copy(alpha = 0.15f), modifier = Modifier.size(34.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Notifications, null, tint = Color(0xFF00C896), modifier = Modifier.size(18.dp))
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("빈자리 알림", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        "즐겨찾기 충전기가 비면 알려드려요",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = { if (it) requestEnable() else disable() },
+                    colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFF00C896))
+                )
+            }
+            if (enabled) {
+                Spacer(Modifier.height(14.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("감시 시간대", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.weight(1f))
+                    TimeChip(fmt(startMin)) {
+                        pick(startMin) { startMin = it; AlertPrefs.setStartMin(ctx, it); viewModel.enableVacancyAlert(startMin, endMin) }
+                    }
+                    Text("  ~  ", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TimeChip(fmt(endMin)) {
+                        pick(endMin) { endMin = it; AlertPrefs.setEndMin(ctx, it); viewModel.enableVacancyAlert(startMin, endMin) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimeChip(text: String, onClick: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.clip(RoundedCornerShape(12.dp))
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF00C896)
         )
     }
 }

@@ -180,3 +180,21 @@ data class BffBatchStatusResponse(
     val success: Boolean,
     val data: Map<String, BatchStatusItem>
 )
+
+// ── 빈자리 알림 구독 (FCM) ──
+data class AlertSubscribeRequest(
+    val token: String,
+    val keys: List<BatchStatusKey>,
+    val startMin: Int,
+    val endMin: Int,
+    val intervalSec: Int,
+    val enabled: Boolean
+)
+
+data class AlertUnsubscribeRequest(
+    val token: String
+)
+
+data class SimpleResponse(
+    val success: Boolean
+)
