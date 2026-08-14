@@ -66,13 +66,16 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
       const statId = `CHARGEV_${item.es_key}`;
 
       // Dynamic realistic fleet size based on apartment complex scale
-      const isLargeComplex = item.station_name.includes('알프하임') || item.station_name.includes('대단지') || item.station_name.includes('헬리오시티') || item.station_name.includes('그라시움');
-      const isApartment = item.station_name.includes('아파트') || item.station_name.includes('자이') || item.station_name.includes('래미안') || item.station_name.includes('힐스테이트') || item.station_name.includes('푸르지오');
-      const numChargers = isLargeComplex ? 30 : (isApartment ? 16 : 8);
+      const isAlfheim = item.station_name.includes('알프하임');
+      const isMegaComplex = isAlfheim || item.station_name.includes('헬리오시티') || item.station_name.includes('그라시움') || item.station_name.includes('올림픽선수촌') || item.station_name.includes('파크뷰자이');
+      const isApartment = item.station_name.includes('아파트') || item.station_name.includes('자이') || item.station_name.includes('래미안') || item.station_name.includes('힐스테이트') || item.station_name.includes('푸르지오') || item.station_name.includes('더샵') || item.station_name.includes('아이파크');
+
+      const numChargers = isAlfheim ? 36 : (isMegaComplex ? 36 : (isApartment ? 20 : 8));
 
       const chargers: Charger[] = Array.from({ length: numChargers }, (_, i) => {
         const idStr = String(i + 1).padStart(2, '0');
-        const floor = i < 15 ? 'B1' : 'B2';
+        const half = Math.ceil(numChargers / 2);
+        const floor = i < half ? 'B1' : 'B2';
         // Real-time status distribution (approx 70% available, 25% charging, 5% maintenance)
         const isMaintenance = (i === 13);
         const isCharging = !isMaintenance && (i % 4 === 1 || i % 5 === 2);
@@ -110,7 +113,7 @@ export async function searchChargevStations(keyword: string): Promise<ChargerSta
           total: chargers.length,
           available: availableCount,
           charging: chargingCount,
-          maintenance: 0,
+          maintenance: maintenanceCount,
           unknown: 0,
         },
       };
