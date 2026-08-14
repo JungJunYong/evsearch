@@ -80,6 +80,17 @@ class MainActivity : ComponentActivity() {
             com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(applicationContext)
         }
 
+        // 빈자리 알림: 알림 채널 초기화 + FCM 토큰 확보/저장
+        com.evsearch.app.alert.AlertNotifications.ensureChannel(applicationContext)
+        try {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    com.evsearch.app.alert.AlertPrefs.setToken(applicationContext, token)
+                }
+        } catch (e: Exception) {
+            // Firebase 미설정 등: 알림 비활성 (앱 동작에는 영향 없음)
+        }
+
         val initialStatId = intent?.getStringExtra("statId")
 
         setContent {

@@ -154,6 +154,13 @@ class MapViewModel(
         _uiState.value = _uiState.value.copy(selectedStation = station)
     }
 
+    /**
+     * 마커 상세 로드: 지도 마커는 경량(poi 좌표/가용여부)이라 이름/대수가 placeholder다.
+     * 탭 시 BFF 상세(nearbyStation)를 불러 실제 충전소명·충전기 대수로 채운다.
+     */
+    suspend fun loadStationDetail(statId: String): ChargerStation? =
+        repository.getStationDetail(statId).getOrNull()
+
     class Factory(private val repository: ChargerRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

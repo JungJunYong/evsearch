@@ -47,7 +47,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,6 +81,7 @@ fun MapScreen(
     var focusLocation by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     // Selected Station Bottom Card
     var selectedStation by remember { mutableStateOf<ChargerStation?>(null) }
+    val detailScope = rememberCoroutineScope()
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -312,7 +315,16 @@ fun MapScreen(
                     centerLng = userLocation?.second ?: 126.9780,
                     userLocation = userLocation,
                     focusLocation = focusLocation,
-                    onPinClick = { station -> selectedStation = station },
+                    onPinClick = { station ->
+                        // 즉시 경량 표시 후, 상세(실제 이름·대수)를 로드해 갱신
+                        selectedStation = station
+                        detailScope.launch {
+                            val detail = viewModel.loadStationDetail(station.statId)
+                            if (detail != null && selectedStation?.statId == station.statId) {
+                                selectedStation = detail
+                            }
+                        }
+                    },
                     onMapClick = { selectedStation = null },
                     onViewportChanged = { minLat, minLng, maxLat, maxLng ->
                         viewport = ViewportBounds(minLat, minLng, maxLat, maxLng)
