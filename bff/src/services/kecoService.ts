@@ -234,13 +234,26 @@ export async function getStationDetail(statId: string, zcode?: string): Promise<
   return fallbackAll.find((s) => s.statId === statId) || null;
 }
 
-export async function getChargerBatchStatus(keys: Array<{ statId: string; chgerId: string }>) {
-  // 배치 상태 조회 캐시 (2분 TTL): 동일 키셋에 대한 반복 호출 방지
+// 배치 응답의 마지막 생성 시각 (캐시 나이 판정용)
+const batchFetchedAt = new Map<string, number>();
+
+/**
+ * 등록 단말기 상태 일괄 조회.
+ *
+ * @param opts.maxAgeMs 허용 캐시 나이(ms). 위젯/알림의 준실시간 경로는 0~20초를 준다.
+ *                      생략하면 기존 상태 캐시 TTL(180초)을 그대로 쓴다.
+ */
+export async function getChargerBatchStatus(
+  keys: Array<{ statId: string; chgerId: string }>,
+  opts: { maxAgeMs?: number } = {}
+) {
+  const maxAgeMs = Math.max(0, opts.maxAgeMs ?? 180_000);
   const sortedKeys = [...keys].sort((a, b) => `${a.statId}:${a.chgerId}`.localeCompare(`${b.statId}:${b.chgerId}`));
   const cacheKey = `batch_${sortedKeys.map((k) => `${k.statId}:${k.chgerId}`).join('|')}`;
   const cached = statusCache.get<Record<string, any>>(cacheKey);
-  if (cached) {
-    console.log(`[BFF Cache Hit] batch status (${keys.length} keys, TTL 120s)`);
+  const cachedAt = batchFetchedAt.get(cacheKey) || 0;
+  if (cached && Date.now() - cachedAt <= maxAgeMs) {
+    console.log(`[BFF Cache Hit] batch status (${keys.length} keys, age ${Date.now() - cachedAt}ms)`);
     return cached;
   }
 
@@ -252,7 +265,8 @@ export async function getChargerBatchStatus(keys: Array<{ statId: string; chgerI
     // (좌표 캐시가 있어야 조회 가능. 없거나 실패하면 위조하지 않고 건너뛴다 → 클라이언트는
     //  Room의 마지막 정상 상태를 유지한다.)
     if (key.statId.startsWith('CHARGEV_')) {
-      const chargevStation = await getChargevStationDetail(key.statId);
+      // 상세 캐시도 같은 신선도 기준을 따르게 한다.
+      const chargevStation = await getChargevStationDetail(key.statId, maxAgeMs);
       if (chargevStation) {
         const chg = chargevStation.chargers.find((c) => c.chgerId === key.chgerId);
         if (chg) {
@@ -262,6 +276,8 @@ export async function getChargerBatchStatus(keys: Array<{ statId: string; chgerI
             status: chg.status,
             statusCode: chg.statusCode,
             statusUpdatedAt: chg.statusUpdatedAt,
+            // 충전 경과 시간 표시용: 충전 시작 시각(없으면 클라이언트가 statusUpdatedAt로 대체)
+            lastChargeStartedAt: chg.lastChargeStartedAt,
             fetchedAt: chargevStation.observedAt || new Date().toISOString(),
           };
         }
@@ -279,6 +295,7 @@ export async function getChargerBatchStatus(keys: Array<{ statId: string; chgerI
           status: chg.status,
           statusCode: chg.statusCode,
           statusUpdatedAt: chg.statusUpdatedAt || new Date().toISOString(),
+          lastChargeStartedAt: chg.lastChargeStartedAt,
           fetchedAt: new Date().toISOString(),
         };
         // 클라이언트가 사용하는 단일 키 형식 (statId:chgerId)
@@ -288,6 +305,7 @@ export async function getChargerBatchStatus(keys: Array<{ statId: string; chgerI
   }
 
   statusCache.set(cacheKey, resultMap);
+  batchFetchedAt.set(cacheKey, Date.now());
   return resultMap;
 }
 

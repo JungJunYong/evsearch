@@ -59,7 +59,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.evsearch.app.data.model.ChargerStation
-import com.evsearch.app.presentation.common.EvSearchTopBar
+import com.evsearch.app.presentation.common.AppleGlobalNav
+import com.evsearch.app.presentation.common.AppleHairline
+import com.evsearch.app.presentation.common.ApplePillButton
+import com.evsearch.app.presentation.common.AppleTile
+import com.evsearch.app.presentation.common.PillStyle
+import com.evsearch.app.presentation.theme.Apple
 import com.evsearch.app.presentation.map.components.KakaoMapView
 
 /**
@@ -209,10 +214,12 @@ fun MapScreen(
     }
 
     Scaffold(
+        containerColor = Apple.C.Canvas,
         topBar = {
-            EvSearchTopBar(
-                title = "EV 충전소",
-                subtitle = if (searchQuery.isNotBlank()) "검색 결과 ${filteredStations.size}개소" else "주변 ${visibleStations.size}개소"
+            AppleGlobalNav(
+                category = "충전소",
+                detail = if (searchQuery.isNotBlank()) "검색 결과 ${filteredStations.size}개소"
+                    else "주변 ${visibleStations.size}개소"
             )
         }
     ) { paddingValues ->
@@ -220,11 +227,11 @@ fun MapScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .background(Apple.C.Canvas)
         ) {
             val focusManager = LocalFocusManager.current
 
-            // Samsung One UI Continuous Curved Squircle Search Bar (28dp radius)
+            // 검색 입력: CTA와 같은 pill 문법
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = {
@@ -242,9 +249,9 @@ fun MapScreen(
                 ),
                 placeholder = {
                     Text(
-                        text = "충전소명, 아파트명, 단말기 번호 검색 (엔터로 검색)",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "충전소·아파트·단말기 번호",
+                        style = Apple.T.Body,
+                        color = Apple.C.TextDisabled,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -257,7 +264,7 @@ fun MapScreen(
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = "검색 실행",
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = Apple.C.Accent
                         )
                     }
                 },
@@ -267,14 +274,14 @@ fun MapScreen(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
                                 strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
+                                color = Apple.C.Accent
                             )
                         }
                         searchQuery.isNotBlank() -> {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "검색어 지우기",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = Apple.C.TextFaint,
                                 modifier = Modifier.clickable {
                                     searchQuery = ""
                                     viewModel.clearSearch()
@@ -287,13 +294,17 @@ fun MapScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp),
-                shape = RoundedCornerShape(28.dp),
+                shape = Apple.S.Pill,
                 singleLine = true,
+                textStyle = Apple.T.Body.copy(color = Apple.C.Text),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    focusedContainerColor = Apple.C.Tile1,
+                    unfocusedContainerColor = Apple.C.Tile1,
+                    focusedBorderColor = Apple.C.AccentFocus,
+                    unfocusedBorderColor = Apple.C.Hairline,
+                    focusedTextColor = Apple.C.Text,
+                    unfocusedTextColor = Apple.C.Text,
+                    cursorColor = Apple.C.Accent
                 )
             )
 
@@ -305,9 +316,9 @@ fun MapScreen(
                     .fillMaxWidth()
                     .height(mapHeight)
                     .padding(horizontal = 16.dp, vertical = 4.dp)
-                    .clip(RoundedCornerShape(26.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(26.dp))
-                    .background(Color(0xFF0B0D14))
+                    .clip(Apple.S.Lg)
+                    .border(1.dp, Apple.C.Hairline, Apple.S.Lg)
+                    .background(Apple.C.Black)
             ) {
                 KakaoMapView(
                     stations = filteredStations,
@@ -343,15 +354,14 @@ fun MapScreen(
                     Surface(
                         onClick = { fetchMyLocation() },
                         shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                        color = Apple.C.ChipTranslucent,
                         modifier = Modifier.size(44.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Default.LocationOn,
                                 contentDescription = "내 위치로 이동",
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = Apple.C.Canvas,
                                 modifier = Modifier.size(22.dp)
                             )
                         }
@@ -361,16 +371,15 @@ fun MapScreen(
                     Surface(
                         onClick = { com.evsearch.app.presentation.map.components.MapZoomController.zoomIn() },
                         shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        color = Apple.C.ChipTranslucent,
                         modifier = Modifier.size(44.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = "+",
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = Apple.C.Canvas,
                                 fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
@@ -379,16 +388,15 @@ fun MapScreen(
                     Surface(
                         onClick = { com.evsearch.app.presentation.map.components.MapZoomController.zoomOut() },
                         shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        color = Apple.C.ChipTranslucent,
                         modifier = Modifier.size(44.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = "−",
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = Apple.C.Canvas,
                                 fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
@@ -398,17 +406,16 @@ fun MapScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color(0xFF0B0D14).copy(alpha = 0.7f)),
+                            .background(Apple.C.Black.copy(alpha = 0.72f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            CircularProgressIndicator(color = Apple.C.Accent)
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "전국 충전소 동기화 중...",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
+                                text = "충전소를 불러오는 중",
+                                style = Apple.T.Caption,
+                                color = Apple.C.TextMuted
                             )
                         }
                     }
@@ -436,40 +443,31 @@ fun MapScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (searchQuery.isNotBlank()) "🔍 검색 결과 (${visibleStations.size}개소)" else "🗺️ 주변 충전소 (${visibleStations.size}개소)",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    text = if (searchQuery.isNotBlank()) "검색 결과 ${visibleStations.size}개소"
+                        else "주변 충전소 ${visibleStations.size}개소",
+                    style = Apple.T.DisplayMd,
+                    color = Apple.C.Text
                 )
 
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = if (userLocation != null) "📍 GPS 연결됨" else "전국 모니터링",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
+                Text(
+                    text = if (userLocation != null) "현재 위치 기준" else "전국 기준",
+                    style = Apple.T.FinePrint,
+                    color = Apple.C.TextFaint
+                )
             }
 
             // Station Card List
             when {
                 uiState.errorMessage != null -> {
                     EmptyMapState(
-                        icon = "⚠️",
-                        title = "데이터를 불러오지 못했습니다",
-                        description = uiState.errorMessage ?: "네트워크 상태를 확인한 후 다시 시도해주세요."
+                        title = "불러오지 못했습니다",
+                        description = uiState.errorMessage ?: "네트워크 상태를 확인한 뒤 다시 시도해 주세요."
                     )
                 }
-                filteredStations.isEmpty() && !uiState.isSearching -> {
+                visibleStations.isEmpty() && !uiState.isSearching -> {
                     EmptyMapState(
-                        icon = "🔌",
-                        title = "검색된 충전소가 없습니다",
-                        description = "충전소 명칭이나 아파트명을 변경하여 다시 검색해보세요."
+                        title = "결과가 없습니다",
+                        description = "충전소 이름이나 아파트 이름을 바꿔 다시 검색해 보세요."
                     )
                 }
                 else -> {
@@ -480,7 +478,7 @@ fun MapScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(visibleStations) { station ->
-                            SamsungOneUIStationCard(
+                            StationRowTile(
                                 station = station,
                                 onClick = {
                                     focusLocation = Pair(station.lat, station.lng)
@@ -496,52 +494,36 @@ fun MapScreen(
     }
 }
 
-/**
- * One UI 9.0 스타일 빈 상태 화면
- */
+/** 빈 상태: 헤드라인 + 리드 문단만. 장식 없음. */
 @Composable
 private fun EmptyMapState(
-    icon: String,
     title: String,
     description: String
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp),
+            .padding(horizontal = Apple.Sp.lg, vertical = Apple.Sp.xxl),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-            modifier = Modifier.size(80.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(text = icon, fontSize = 36.sp)
-            }
-        }
-        Spacer(modifier = Modifier.height(14.dp))
         Text(
             text = title,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 16.sp,
-            color = MaterialTheme.colorScheme.onSurface
+            style = Apple.T.HeroDisplay,
+            color = Apple.C.Text,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(Apple.Sp.sm))
         Text(
             text = description,
-            fontSize = 13.sp,
-            lineHeight = 18.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = Apple.T.LeadAiry,
+            color = Apple.C.TextMuted,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
     }
 }
 
-/**
- * One UI 9.0 스타일 선택 충전소 요약 카드 (지도 하단 플로팅)
- */
+/** 지도 위에 떠 있는 선택 충전소 요약 — 반투명 없이 타일 하나. */
 @Composable
 private fun SelectedStationSummaryCard(
     station: ChargerStation,
@@ -549,210 +531,116 @@ private fun SelectedStationSummaryCard(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val statusColor = if (station.summary.available > 0) Color(0xFF00C896) else Color(0xFF64748B)
-    val statusText = if (station.summary.available > 0) "사용가능" else "이용불가"
+    val available = station.summary.available
+    val accentColor = if (available > 0) Apple.C.StatusAvailable else Apple.C.TextFaint
 
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 상태 도트
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(statusColor)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+    AppleTile(modifier = modifier, tone = Apple.C.Tile1) {
+        Column(modifier = Modifier.padding(Apple.Sp.md)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = station.name,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        style = Apple.T.BodyStrong,
+                        color = Apple.C.Text,
                         maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = station.address,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = Apple.T.FinePrint,
+                        color = Apple.C.TextFaint,
                         maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "닫기",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = Apple.C.TextFaint,
                     modifier = Modifier
                         .size(20.dp)
                         .clickable { onClose() }
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(Apple.Sp.sm))
+            AppleHairline()
+            Spacer(modifier = Modifier.height(Apple.Sp.sm))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = statusColor.copy(alpha = 0.16f)
-                ) {
-                    Text(
-                        text = if (station.summary.total > 0)
-                            "$statusText ${station.summary.available}/${station.summary.total}대"
-                        else statusText,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = statusColor,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "상세정보 / 위젯 등록 →",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { onDetailClick() }
+                    text = if (station.summary.total > 0) "충전 가능 $available / ${station.summary.total}대"
+                        else if (available > 0) "충전 가능" else "이용 불가",
+                    style = Apple.T.CaptionStrong,
+                    color = accentColor,
+                    modifier = Modifier.weight(1f)
+                )
+                ApplePillButton(
+                    text = "상세",
+                    compact = true,
+                    style = PillStyle.Primary,
+                    onClick = onDetailClick
                 )
             }
         }
     }
 }
 
-/**
- * Samsung One UI 9.0 Styled Station Card (26dp Squircle)
- */
+/** 목록 행 타일: 이름 · 운영자 · 거리 · 가용 대수. 색은 상태 라벨에만. */
 @Composable
-fun SamsungOneUIStationCard(
+fun StationRowTile(
     station: ChargerStation,
     onClick: () -> Unit
 ) {
-    val isAvailable = station.summary.available > 0
+    val available = station.summary.available
     val operator = station.operatorName ?: "충전소"
-    val isChargeV = operator.contains("차지비") || operator.contains("ChargEV")
+    val distanceText = station.distanceKm?.let { dist ->
+        if (dist > 0 && dist < 1000) {
+            if (dist < 1.0) "${(dist * 1000).toInt()}m" else String.format("%.1fkm", dist)
+        } else null
+    }
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .clip(RoundedCornerShape(22.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 8.dp)
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = if (isChargeV) Color(0xFF3B82F6).copy(alpha = 0.15f) else (if (isAvailable) Color(0xFF00C896).copy(alpha = 0.15f) else Color.Gray.copy(alpha = 0.15f)),
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = null,
-                                tint = if (isChargeV) Color(0xFF3B82F6) else (if (isAvailable) Color(0xFF00C896) else Color.Gray),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    Column(modifier = Modifier.weight(1f, fill = false)) {
-                        Text(
-                            text = station.name,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = operator,
-                            fontSize = 11.sp,
-                            fontWeight = if (isChargeV) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isChargeV) Color(0xFF3B82F6) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+    AppleTile(tone = Apple.C.Tile1, onClick = onClick) {
+        Column(modifier = Modifier.padding(Apple.Sp.md)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = station.name,
+                        style = Apple.T.BodyStrong,
+                        color = Apple.C.Text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (distanceText != null) "$operator · $distanceText" else operator,
+                        style = Apple.T.FinePrint,
+                        color = Apple.C.TextFaint,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    // 거리 표시
-                    station.distanceKm?.let { dist ->
-                        if (dist > 0 && dist < 1000) {
-                            Text(
-                                text = if (dist < 1.0) "${(dist * 1000).toInt()}m" else String.format("%.1fkm", dist),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF3B82F6),
-                                modifier = Modifier.padding(end = 6.dp)
-                            )
-                        }
-                    }
-
-                    // 사용가능 표시 (⚡ N/N)
-                    Surface(
-                        color = if (isAvailable) Color(0xFF00C896).copy(alpha = 0.15f) else Color(0xFF64748B).copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = when {
-                                isAvailable && station.summary.total > 0 -> "⚡ ${station.summary.available}/${station.summary.total} 가용"
-                                isAvailable -> "⚡ 충전 가능"
-                                else -> "✕ 이용불가"
-                            },
-                            color = if (isAvailable) Color(0xFF00C896) else Color(0xFF94A3B8),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                Spacer(modifier = Modifier.width(Apple.Sp.xs))
+                Column(horizontalAlignment = Alignment.End) {
+                    val hasCount = station.summary.total > 0
+                    Text(
+                        text = if (hasCount) "$available / ${station.summary.total}"
+                            else if (available > 0) "충전 가능" else "이용 불가",
+                        style = Apple.T.BodyStrong,
+                        color = if (available > 0) Apple.C.StatusAvailable else Apple.C.TextFaint,
+                        maxLines = 1
+                    )
+                    if (hasCount) {
+                        Text(text = "충전 가능", style = Apple.T.MicroLegal, color = Apple.C.TextFaint)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
+            Spacer(modifier = Modifier.height(Apple.Sp.xs))
             Text(
                 text = station.address,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = Apple.T.FinePrint,
+                color = Apple.C.TextFaint,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

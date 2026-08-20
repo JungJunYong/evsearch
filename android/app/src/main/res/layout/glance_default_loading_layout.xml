@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#1E293B"
+    android:background="@drawable/bg_widget_rounded"
     android:gravity="center"
     android:orientation="vertical"
     android:padding="16dp">
@@ -10,8 +10,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="⚡ EV 충전기 상태 읽는 중..."
-        android:textColor="#FFFFFF"
-        android:textSize="14sp"
-        android:textStyle="bold" />
+        android:text="상태를 읽는 중"
+        android:textColor="#CCCCCC"
+        android:textSize="14sp" />
 </LinearLayout>

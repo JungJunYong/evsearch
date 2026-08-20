@@ -369,7 +369,7 @@ stationRouter.get('/:statId', async (req: Request, res: Response) => {
  */
 stationRouter.post('/batch-status', async (req: Request, res: Response) => {
   try {
-    const { keys } = req.body;
+    const { keys, maxAgeMs } = req.body;
     if (!Array.isArray(keys)) {
       return res.status(400).json({
         success: false,
@@ -380,7 +380,9 @@ stationRouter.post('/batch-status', async (req: Request, res: Response) => {
       });
     }
 
-    const results = await getChargerBatchStatus(keys);
+    // 클라이언트가 신선도를 요구할 수 있다(위젯 실시간 갱신은 20초 이하).
+    const freshness = Number.isFinite(maxAgeMs) ? Math.max(0, Math.min(600_000, Number(maxAgeMs))) : undefined;
+    const results = await getChargerBatchStatus(keys, freshness === undefined ? {} : { maxAgeMs: freshness });
     res.json({
       success: true,
       data: results,

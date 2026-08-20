@@ -1,55 +1,32 @@
 package com.evsearch.app.presentation.saved
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import android.Manifest
-import android.app.TimePickerDialog
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
-import com.evsearch.app.alert.AlertPrefs
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -59,22 +36,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.evsearch.app.alert.AlertPrefs
 import com.evsearch.app.data.local.SavedChargerEntity
 import com.evsearch.app.data.model.ChargerStatus
-import com.evsearch.app.presentation.common.EvSearchTopBar
+import com.evsearch.app.presentation.common.AppleChipRow
+import com.evsearch.app.presentation.common.AppleEmptyState
+import com.evsearch.app.presentation.common.AppleGlobalNav
+import com.evsearch.app.presentation.common.AppleHairline
+import com.evsearch.app.presentation.common.AppleStatusLabel
+import com.evsearch.app.presentation.common.AppleTile
+import com.evsearch.app.presentation.common.AppleUtilityButton
+import com.evsearch.app.presentation.common.StateDuration
+import com.evsearch.app.presentation.favorites.fmtDuration
+import com.evsearch.app.presentation.favorites.relativeTime
+import com.evsearch.app.presentation.theme.Apple
 
 /**
- * Samsung One UI 9.0 Styled Saved Widget Chargers Screen
- * - 위젯에 등록된 충전기 목록을 별도 탭에서 관리
- * - 각 항목의 라벨(별칭)을 사용자가 임의로 수정 가능한 커스텀 기능 제공
+ * 위젯 탭 — 홈 화면 위젯에 올릴 단말기 목록과 자동 갱신 주기를 관리한다.
+ * 즐겨찾기(알림) 목록과는 독립적이다.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SavedChargersScreen(
     viewModel: SavedChargersViewModel,
@@ -86,6 +68,8 @@ fun SavedChargersScreen(
     var editingTarget by remember { mutableStateOf<SavedChargerEntity?>(null) }
     var editingName by remember { mutableStateOf("") }
 
+    LaunchedEffect(Unit) { viewModel.reloadSettings() }
+
     LaunchedEffect(uiState.message) {
         uiState.message?.let {
             snackbarHostState.showSnackbar(it)
@@ -94,143 +78,149 @@ fun SavedChargersScreen(
     }
 
     Scaffold(
+        containerColor = Apple.C.Canvas,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            EvSearchTopBar(
-                title = "위젯 충전기",
-                subtitle = "등록된 단말기 ${uiState.savedChargers.size}개",
+            AppleGlobalNav(
+                category = "위젯",
+                detail = "${uiState.savedChargers.size}개 단말기 · ${fmtDuration(uiState.widgetIntervalSec)} 자동 갱신",
                 actions = {
-                    IconButton(
-                        onClick = { viewModel.refreshStatus() },
-                        enabled = !uiState.isRefreshing && uiState.savedChargers.isNotEmpty()
-                    ) {
-                        if (uiState.isRefreshing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "상태 새로고침",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                    if (uiState.isRefreshing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.width(20.dp).height(20.dp),
+                            strokeWidth = 2.dp,
+                            color = Apple.C.Accent
+                        )
+                    } else {
+                        AppleUtilityButton(
+                            text = "",
+                            icon = Icons.Default.Refresh,
+                            tint = Apple.C.Accent,
+                            enabled = uiState.savedChargers.isNotEmpty(),
+                            onClick = { viewModel.refreshStatus() }
+                        )
                     }
                 }
             )
         }
-    ) { paddingValues ->
+    ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
+                .padding(padding)
+                .background(Apple.C.Canvas)
         ) {
-            when {
-                uiState.isLoading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            if (uiState.isLoading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Apple.C.Accent)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = Apple.Sp.md, end = Apple.Sp.md,
+                        top = Apple.Sp.lg, bottom = Apple.Sp.xl
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(Apple.Sp.sm)
+                ) {
+                    item {
+                        WidgetSyncTile(
+                            intervalSec = uiState.widgetIntervalSec,
+                            lastSyncAt = uiState.lastSyncAt,
+                            lastPushAt = uiState.lastPushAt,
+                            onIntervalChange = viewModel::setWidgetIntervalSec
+                        )
+                        Spacer(Modifier.height(Apple.Sp.xs))
                     }
-                }
-                uiState.savedChargers.isEmpty() -> {
-                    EmptySavedChargersContent()
-                }
-                else -> {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
+
+                    if (uiState.savedChargers.isEmpty()) {
                         item {
-                            VacancyAlertCard(viewModel = viewModel)
-                            Spacer(modifier = Modifier.height(12.dp))
+                            AppleEmptyState(
+                                headline = "위젯이 비어 있습니다",
+                                body = "지도에서 충전소를 열고 단말기의 ‘위젯 추가’를 누르면\n홈 화면 위젯에 최대 6대까지 표시됩니다."
+                            )
+                        }
+                    } else {
+                        item {
+                            Text(
+                                text = "위젯 표시 순서",
+                                style = Apple.T.CaptionStrong,
+                                color = Apple.C.TextFaint,
+                                modifier = Modifier.padding(top = Apple.Sp.xs, bottom = Apple.Sp.xxs)
+                            )
                         }
                         items(uiState.savedChargers, key = { it.key }) { charger ->
-                            OneUI9SavedChargerCard(
+                            WidgetChargerTile(
                                 charger = charger,
-                                onEditClick = {
+                                onClick = { onStationClick(charger.statId) },
+                                onEdit = {
                                     editingTarget = charger
                                     editingName = charger.customName ?: ""
                                 },
-                                onDeleteClick = { viewModel.removeCharger(charger.key) },
-                                onClick = { onStationClick(charger.statId) }
+                                onDelete = { viewModel.removeCharger(charger.key) }
                             )
                         }
-                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                        if (uiState.savedChargers.size > 6) {
+                            item {
+                                Spacer(Modifier.height(Apple.Sp.xxs))
+                                Text(
+                                    "홈 위젯에는 앞의 6대까지 표시됩니다.",
+                                    style = Apple.T.MicroLegal,
+                                    color = Apple.C.TextFaint
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // One UI 9.0 Style Label Edit Dialog
         editingTarget?.let { target ->
             AlertDialog(
                 onDismissRequest = { editingTarget = null },
-                shape = RoundedCornerShape(28.dp),
-                containerColor = MaterialTheme.colorScheme.surface,
-                title = {
-                    Text(
-                        text = "별칭 수정",
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                },
+                shape = Apple.S.Lg,
+                containerColor = Apple.C.Tile1,
+                title = { Text("별칭", style = Apple.T.DisplayMd, color = Apple.C.Text) },
                 text = {
                     Column {
                         Text(
-                            text = "${target.stationName} · 단말기 #${target.chgerId}",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            "${target.stationName} · 단말기 ${target.chgerId}",
+                            style = Apple.T.FinePrint,
+                            color = Apple.C.TextFaint
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(Modifier.height(Apple.Sp.sm))
                         OutlinedTextField(
                             value = editingName,
                             onValueChange = { editingName = it.take(20) },
-                            placeholder = {
-                                Text(
-                                    "예: 우리집 앞 급속",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 14.sp
-                                )
-                            },
+                            placeholder = { Text("예: 지하 2층 3번", style = Apple.T.Caption, color = Apple.C.TextDisabled) },
                             singleLine = true,
-                            shape = RoundedCornerShape(18.dp),
+                            shape = Apple.S.Md,
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                                focusedBorderColor = Apple.C.AccentFocus,
+                                unfocusedBorderColor = Apple.C.Hairline,
+                                focusedTextColor = Apple.C.Text,
+                                unfocusedTextColor = Apple.C.Text
                             ),
                             supportingText = {
                                 Text(
-                                    "비워두면 기본 충전소 이름이 표시됩니다.",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    "비워두면 충전소 이름이 표시됩니다.",
+                                    style = Apple.T.MicroLegal,
+                                    color = Apple.C.TextFaint
                                 )
                             }
                         )
                     }
                 },
                 confirmButton = {
-                    TextButton(
-                        onClick = {
-                            viewModel.updateCustomName(target.key, editingName)
-                            editingTarget = null
-                        }
-                    ) {
-                        Text(
-                            "저장",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    TextButton(onClick = {
+                        viewModel.updateCustomName(target.key, editingName)
+                        editingTarget = null
+                    }) { Text("저장", style = Apple.T.BodyStrong, color = Apple.C.Accent) }
                 },
                 dismissButton = {
                     TextButton(onClick = { editingTarget = null }) {
-                        Text("취소", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("취소", style = Apple.T.Body, color = Apple.C.TextMuted)
                     }
                 }
             )
@@ -238,275 +228,48 @@ fun SavedChargersScreen(
     }
 }
 
-/**
- * One UI 9.0 Styled Saved Charger Card
- * - 26dp 연속 곡률(Squircle), 헤어라인 보더, 상태 Pill 배지
- */
+/** 위젯 실시간 갱신 설정 타일. */
 @Composable
-private fun OneUI9SavedChargerCard(
-    charger: SavedChargerEntity,
-    onEditClick: () -> Unit,
-    onDeleteClick: () -> Unit,
-    onClick: () -> Unit
+private fun WidgetSyncTile(
+    intervalSec: Int,
+    lastSyncAt: Long,
+    lastPushAt: Long,
+    onIntervalChange: (Int) -> Unit
 ) {
-    val statusEnum = ChargerStatus.fromString(charger.status)
-    val (statusText, statusColor) = when (statusEnum) {
-        ChargerStatus.AVAILABLE -> Pair("대기", Color(0xFF00C896))
-        ChargerStatus.CHARGING -> Pair("충전중", Color(0xFF3B82F6))
-        ChargerStatus.COMM_ERROR -> Pair("장애", Color(0xFFF97316))
-        ChargerStatus.MAINTENANCE -> Pair("점검", Color(0xFFEAB308))
-        ChargerStatus.SUSPENDED -> Pair("중지", Color(0xFFEF4444))
-        ChargerStatus.RESERVED -> Pair("예약", Color(0xFFA855F7))
-        ChargerStatus.UNCONFIRMED, ChargerStatus.UNKNOWN -> Pair("미확인", Color(0xFF64748B))
-    }
-
-    val displayName = charger.customName ?: charger.stationName
-
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(26.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        shadowElevation = 0.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant,
-                RoundedCornerShape(26.dp)
+    AppleTile(tone = Apple.C.Tile1) {
+        Column(modifier = Modifier.padding(Apple.Sp.md)) {
+            Text("자동 갱신", style = Apple.T.BodyStrong, color = Apple.C.Text)
+            Spacer(Modifier.height(Apple.Sp.xxs))
+            Text(
+                "상태가 바뀌면 서버가 곧바로 위젯을 깨웁니다. 아래 주기는 푸시가 막혔을 때를 위한 보조 갱신입니다.",
+                style = Apple.T.FinePrint,
+                color = Apple.C.TextFaint
             )
-    ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            // One UI 9.0 Style Status Accent Bar (좌측 컬러 스트립)
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(78.dp)
-                    .align(Alignment.CenterVertically)
-                    .padding(vertical = 14.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(statusColor)
-                )
-            }
-
-            Column(modifier = Modifier
-                .weight(1f)
-                .padding(start = 12.dp, end = 8.dp, top = 14.dp, bottom = 14.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = displayName,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        if (charger.customName != null) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = charger.stationName,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                    IconButton(onClick = onEditClick, modifier = Modifier.size(34.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "별칭 수정",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    IconButton(onClick = onDeleteClick, modifier = Modifier.size(34.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "위젯 등록 해제",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(end = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val displayCode = if (charger.chgerId.length == 6) "${charger.chgerId.substring(0, 5)} ${charger.chgerId.substring(5)}" else "#${charger.chgerId}"
-                    val cleanType = charger.chargerTypeName.replace(" \\(.*\\)".toRegex(), "")
-                    val specText = if (!cleanType.contains("kW") && charger.outputKw != null) "$cleanType (${charger.outputKw}kW)" else cleanType
-
-                    Text(
-                        text = "충전기 $displayCode · $specText",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = statusColor.copy(alpha = 0.16f)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(statusColor)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = statusText,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = statusColor
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * One UI 9.0 Styled Empty State
- */
-@Composable
-private fun EmptySavedChargersContent() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = Color(0xFF00C896).copy(alpha = 0.12f),
-            modifier = Modifier.size(88.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.Star,
-                    contentDescription = null,
-                    tint = Color(0xFF00C896),
-                    modifier = Modifier.size(42.dp)
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(18.dp))
-        Text(
-            text = "등록된 위젯 충전기가 없습니다",
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 17.sp,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "지도 탭에서 충전소를 선택한 후\n단말기의 [★ 위젯 추가]를 터치하면\n이곳과 홈 화면 위젯에 표시됩니다.",
-            fontSize = 13.sp,
-            lineHeight = 19.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-        )
-    }
-}
-
-/** 빈자리 알림 설정 카드: 토글 + 감시 시간대 (FCM 서버 푸시). */
-@Composable
-private fun VacancyAlertCard(viewModel: SavedChargersViewModel) {
-    val ctx = LocalContext.current
-    var enabled by remember { mutableStateOf(AlertPrefs.getEnabled(ctx)) }
-    var startMin by remember { mutableStateOf(AlertPrefs.getStartMin(ctx)) }
-    var endMin by remember { mutableStateOf(AlertPrefs.getEndMin(ctx)) }
-
-    fun fmt(m: Int): String = "%02d:%02d".format(m / 60, m % 60)
-
-    fun applyEnable() {
-        AlertPrefs.setEnabled(ctx, true)
-        AlertPrefs.setStartMin(ctx, startMin)
-        AlertPrefs.setEndMin(ctx, endMin)
-        enabled = true
-        viewModel.enableVacancyAlert(startMin, endMin)
-    }
-    val permLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> if (granted) applyEnable() }
-
-    fun requestEnable() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else applyEnable()
-    }
-    fun disable() {
-        AlertPrefs.setEnabled(ctx, false); enabled = false; viewModel.disableVacancyAlert()
-    }
-    fun pick(initial: Int, onPicked: (Int) -> Unit) {
-        TimePickerDialog(ctx, { _, h, m -> onPicked(h * 60 + m) }, initial / 60, initial % 60, true).show()
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)),
-        color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = CircleShape, color = Color(0xFF00C896).copy(alpha = 0.15f), modifier = Modifier.size(34.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Notifications, null, tint = Color(0xFF00C896), modifier = Modifier.size(18.dp))
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.height(Apple.Sp.sm))
+            AppleChipRow(
+                options = AlertPrefs.WIDGET_INTERVAL_OPTIONS.map { fmtDuration(it) to it },
+                selected = intervalSec,
+                onSelect = onIntervalChange
+            )
+            Spacer(Modifier.height(Apple.Sp.sm))
+            AppleHairline()
+            Spacer(Modifier.height(Apple.Sp.sm))
+            Row(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("빈자리 알림", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Text("마지막 동기화", style = Apple.T.MicroLegal, color = Apple.C.TextFaint)
                     Text(
-                        "즐겨찾기 충전기가 비면 알려드려요",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        if (lastSyncAt > 0) relativeTime(lastSyncAt) else "대기 중",
+                        style = Apple.T.CaptionStrong,
+                        color = Apple.C.TextMuted
                     )
                 }
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = { if (it) requestEnable() else disable() },
-                    colors = SwitchDefaults.colors(checkedTrackColor = Color(0xFF00C896))
-                )
-            }
-            if (enabled) {
-                Spacer(Modifier.height(14.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("감시 시간대", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.weight(1f))
-                    TimeChip(fmt(startMin)) {
-                        pick(startMin) { startMin = it; AlertPrefs.setStartMin(ctx, it); viewModel.enableVacancyAlert(startMin, endMin) }
-                    }
-                    Text("  ~  ", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TimeChip(fmt(endMin)) {
-                        pick(endMin) { endMin = it; AlertPrefs.setEndMin(ctx, it); viewModel.enableVacancyAlert(startMin, endMin) }
-                    }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("마지막 서버 푸시", style = Apple.T.MicroLegal, color = Apple.C.TextFaint)
+                    Text(
+                        if (lastPushAt > 0) relativeTime(lastPushAt) else "대기 중",
+                        style = Apple.T.CaptionStrong,
+                        color = Apple.C.TextMuted
+                    )
                 }
             }
         }
@@ -514,20 +277,63 @@ private fun VacancyAlertCard(viewModel: SavedChargersViewModel) {
 }
 
 @Composable
-private fun TimeChip(text: String, onClick: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.clip(RoundedCornerShape(12.dp))
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF00C896)
-        )
+private fun WidgetChargerTile(
+    charger: SavedChargerEntity,
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val status = ChargerStatus.fromString(charger.status)
+    val title = charger.customName ?: charger.stationName
+
+    AppleTile(tone = Apple.C.Tile1, onClick = onClick) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(Apple.Sp.md),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = Apple.T.BodyStrong,
+                    color = Apple.C.Text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "단말기 ${charger.chgerId} · ${specText(charger)}",
+                    style = Apple.T.FinePrint,
+                    color = Apple.C.TextFaint,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(Apple.Sp.xs))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AppleStatusLabel(status = status, compact = true)
+                    StateDuration.label(status, charger.stateSinceAt, charger.statusUpdatedAt)?.let {
+                        Text(
+                            text = " · $it",
+                            style = Apple.T.MicroLegal,
+                            color = Apple.C.TextFaint,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.width(Apple.Sp.xs))
+            AppleUtilityButton(text = "", icon = Icons.Default.Edit, tint = Apple.C.Accent, onClick = onEdit)
+            Spacer(Modifier.width(Apple.Sp.xxs))
+            AppleUtilityButton(
+                text = "",
+                icon = Icons.Default.Delete,
+                tint = Apple.C.StatusSuspended,
+                onClick = onDelete
+            )
+        }
     }
+}
+
+private fun specText(c: SavedChargerEntity): String {
+    val type = c.chargerTypeName.replace(Regex(" \\(.*\\)"), "")
+    return if (!type.contains("kW") && c.outputKw != null) "$type ${c.outputKw}kW" else type
 }

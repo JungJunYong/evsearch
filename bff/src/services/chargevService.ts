@@ -424,10 +424,23 @@ export async function getNearbyChargevStations(
  * statId(CHARGEV_{es_key})로 충전소 상세(실시간 충전기 목록) 조회.
  * 좌표 캐시가 있어야 nearbyStation을 호출할 수 있다. 없으면 null.
  */
-export async function getChargevStationDetail(statId: string): Promise<ChargerStation | null> {
+// statId -> 마지막 상세 조회 시각. 호출부가 허용 캐시 나이를 지정할 수 있게 한다.
+const detailFetchedAt = new Map<string, number>();
+
+/**
+ * 충전소 상세(실시간 충전기 상태).
+ *
+ * @param maxAgeMs 이 나이보다 오래된 캐시는 무시하고 업스트림을 다시 부른다.
+ *                 위젯/알림의 준실시간 경로가 짧은 값을 준다. 기본값은 기존 캐시 TTL.
+ */
+export async function getChargevStationDetail(
+  statId: string,
+  maxAgeMs = 90_000
+): Promise<ChargerStation | null> {
   const cacheKey = `detail_${statId}`;
   const cached = chargevCache.get<ChargerStation>(cacheKey);
-  if (cached) return cached;
+  const fetchedAt = detailFetchedAt.get(statId) || 0;
+  if (cached && Date.now() - fetchedAt <= maxAgeMs) return cached;
 
   const esKey = statId.replace(/^CHARGEV_/, '');
   const coord = resolveCoord(esKey);
@@ -439,6 +452,7 @@ export async function getChargevStationDetail(statId: string): Promise<ChargerSt
 
   const station = mapStation(found, new Date().toISOString(), coord);
   chargevCache.set(cacheKey, station);
+  detailFetchedAt.set(statId, Date.now());
   return station;
 }
 

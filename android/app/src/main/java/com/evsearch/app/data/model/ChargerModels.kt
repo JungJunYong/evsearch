@@ -164,7 +164,9 @@ data class BatchStatusKey(
 )
 
 data class BatchStatusRequest(
-    val keys: List<BatchStatusKey>
+    val keys: List<BatchStatusKey>,
+    /** 서버 캐시 허용 나이(ms). 위젯 실시간 갱신은 짧게 준다. null이면 서버 기본값. */
+    val maxAgeMs: Long? = null
 )
 
 data class BatchStatusItem(
@@ -173,6 +175,8 @@ data class BatchStatusItem(
     val status: String,
     val statusCode: Int,
     val statusUpdatedAt: String?,
+    /** 충전 시작 시각(사업자 제공). 없으면 statusUpdatedAt으로 대체해 경과 시간을 계산한다. */
+    val lastChargeStartedAt: String? = null,
     val fetchedAt: String
 )
 
@@ -182,13 +186,24 @@ data class BffBatchStatusResponse(
 )
 
 // ── 빈자리 알림 구독 (FCM) ──
+/** 서버 감시 대상 1건. notify=false 는 위젯 실시간 동기화용(푸시 알림 없음). */
+data class AlertWatchKey(
+    val statId: String,
+    val chgerId: String,
+    val notify: Boolean
+)
+
 data class AlertSubscribeRequest(
     val token: String,
-    val keys: List<BatchStatusKey>,
+    val keys: List<AlertWatchKey>,
+    /** 감시 시작 분(0~1439). startMin == endMin 이면 종일. */
     val startMin: Int,
     val endMin: Int,
+    /** 서버 조회 주기(초). 최소 30초. */
     val intervalSec: Int,
-    val enabled: Boolean
+    val enabled: Boolean,
+    /** 상태가 바뀌면 데이터 전용 푸시로 위젯을 즉시 갱신할지 여부. */
+    val silentSync: Boolean = true
 )
 
 data class AlertUnsubscribeRequest(

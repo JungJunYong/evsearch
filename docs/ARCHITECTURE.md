@@ -116,34 +116,59 @@ ChargEV의 물리 번호(예: `110537`)는 끝 두 자리와 Elecvery 단말기 
 
 ### 4.3 위젯
 
-위젯 1개는 1개의 `statId + chgerId`를 표현한다.
+**위젯 목록과 즐겨찾기 목록은 서로 독립적인 두 목록이다.** 하나의 단말기가 두 목록에
+동시에 속할 수 있고, 어느 목록에도 속하지 않게 되면 로컬 레코드를 지운다. Room의
+`saved_chargers` 한 테이블에 `isWidget` / `isFavorite` 플래그로 구분한다.
 
-- 충전소명 및 단말기 번호
-- 현재 상태와 상태 색상
-- 충전 타입/용량
-- 마지막 상태 갱신 시각
-- 마지막 조회 시각 및 오래된 데이터 표시
-- 위젯 탭 시 충전기 상세 화면으로 이동
-- 위젯 설정 변경 시 다른 충전기로 교체 가능
-- 앱 내 `위젯` 탭에서 등록된 충전기 목록을 확인하고 각 항목의 별칭(`customName`)을 수정하거나 등록을 해제할 수 있다. 별칭은 홈 위젯과 앱 내 목록에 동시에 반영된다.
+- 위젯 목록(`isWidget`): 홈 화면 위젯에 표시할 대상. 위젯 탭에서 관리한다.
+- 즐겨찾기 목록(`isFavorite`): 빈자리 알림 대상. 즐겨찾기 탭에서 관리한다.
 
-위젯은 서버의 상태를 직접 읽지 않고 Room의 마지막 정상 데이터를 표시한다. 갱신 성공 시 Room과 위젯을 함께 갱신하고, 실패 시 마지막 정상 상태를 유지하면서 `업데이트 실패` 또는 `N분 전`을 표시한다.
+홈 위젯은 위젯 목록의 앞 6대를 표시한다. 표시 항목은 별칭(또는 단말기 번호), 상태,
+마지막 동기화 시각, 자동 갱신 주기이며 탭하면 앱이 열린다. 위젯은 서버를 직접 읽지 않고
+Room의 마지막 정상 데이터를 그린다.
 
-위젯 크기별 표시 방식은 다음과 같다. 소형 위젯은 런처에서 4×1로 유지하되 내부 콘텐츠를 한 행 여섯 개의 동일한 슬롯(1×6)으로 표시한다. 등록된 충전기가 여섯 개보다 적어도 빈 슬롯을 유지해 카드 간격과 폭이 변하지 않도록 한다. 4×2와 4×3 위젯은 각각 2×3, 3×2 그리드를 사용한다.
+위젯 크기별 배치: 4×1은 한 줄 6슬롯, 4×2는 2행×3열, 4×3은 3행×2열.
+
+### 4.3.1 상태 지속 시간 표기
+
+즐겨찾기·위젯 목록과 충전소 상세는 상태가 얼마나 이어졌는지 함께 보여준다
+(예: `충전 4시간 16분째`, `12분째 비어 있음`). 기준 시각은 사업자가 준 값만 쓴다
+(ChargEV `last_start_time` → 없으면 `last_time`). 시각이 없으면 아무것도 표시하지 않고
+경과 시간을 추정하지 않는다. 계산은 `presentation/common/StateDuration.kt` 한 곳에서만 한다.
+
+### 4.4 즐겨찾기와 빈자리 알림
+
+즐겨찾기 탭에서 사용자가 직접 정하는 값:
+
+| 설정 | 범위 | 기본값 |
+|---|---|---|
+| 알림 켜기/끄기 | on/off | off |
+| 감시 시간 범위 | 시작~종료(분 단위, 자정 넘김 허용), 시작 == 종료면 종일 | 18:00~23:00 |
+| 확인 주기 | 30초 / 1분 / 2분 / 5분 | 1분 |
+| 항목별 알림 | 즐겨찾기 단말기마다 on/off | on |
+
+서버는 등록된 주기로 상태를 조회하고 `충전 중 → 충전 가능` **전환 순간에만** 푸시한다
+(첫 관측은 기준선으로만 쓴다). 시간 범위 밖에서는 알림을 보내지 않는다.
 
 ## 5. 갱신 정책
 
-공공 API의 `getChargerStatus`는 `period`를 1~10분 범위로 제공하지만, Android 일반 위젯의 주기적 백그라운드 실행은 시스템 배터리 정책의 영향을 받으며 WorkManager 최소 주기는 통상 15분이다.
+Android 일반 위젯의 주기적 백그라운드 실행은 시스템 배터리 정책에 묶이고 WorkManager
+최소 주기는 15분이다. 그래서 실시간성은 **서버 푸시**로 만들고, 주기 작업은 푸시가 막혔을
+때의 보조 수단으로 둔다.
 
-| 상황 | 동작 |
-|---|---|
-| 지도/상세 화면 진입 | `getChargerInfo` 또는 상세 상태 즉시 조회 |
-| 사용자가 새로고침 | 등록 단말기만 상태 조회 |
-| 위젯 갱신 | WorkManager에서 등록 단말기 상태 일괄 조회 |
-| 네트워크 실패 | 지수 백오프 재시도, 마지막 정상 데이터 표시 |
-| 오래된 데이터 | 상태 옆에 갱신 시각 표시, 임의로 사용 가능 판정하지 않음 |
+| 경로 | 동작 | 실효 지연 |
+|---|---|---|
+| 서버 상태 변화 감지 | BFF가 데이터 전용 FCM 푸시(`type=widget_sync`) → 앱이 즉시 동기화 후 위젯 재작성 | 수 초 |
+| 빈자리 전환 | 알림 푸시(`type=vacancy`, data 동봉) → 알림 표시 + 위젯 갱신 | 수 초 |
+| 사용자 지정 주기 | OneTimeWork 체인이 스스로 다음 회차를 예약(1/3/5/15/30분 선택) | 선택 주기 |
+| 안전망 | 15분 PeriodicWork + `updatePeriodMillis` | 최대 15~30분 |
+| 수동 | 위젯 새로고침 탭, 앱 진입/복귀, 목록 화면 새로고침 | 즉시 |
 
-`statUpdDt`는 API가 상태를 갱신한 시각이며 앱의 조회 시각과 구분한다. 위젯 문구는 `상태 기준 3분 전 · 앱 조회 1분 전`처럼 데이터 신뢰성을 명확하게 표현한다. 사용 가능 여부는 예약을 보장하지 않으므로 “사용 가능”을 “자리 확보”로 표현하지 않는다.
+앱은 배치 상태 조회 시 허용 캐시 나이(`maxAgeMs`)를 함께 보낸다. 위젯 자동 갱신은 20초,
+수동 새로고침과 서버 알림 폴링은 0~절반 주기를 써서 서버 캐시가 실시간성을 깎지 않게 한다.
+
+`statUpdDt`(사업자 상태 갱신 시각)와 앱 조회 시각은 구분해 표시한다. 사용 가능 여부는
+자리를 예약하지 않으므로 “충전 가능”을 “자리 확보”로 표현하지 않는다.
 
 ## 6. 도메인 및 저장 모델
 
@@ -179,20 +204,29 @@ lastChargeEndedAt: Instant?
 isDeleted: Boolean
 ```
 
-### SavedCharger
+### SavedCharger (Room `saved_chargers`, v3)
 
 ```text
 key: String                  // statId + ":" + chgerId
 statId: String
 chgerId: String
-displayName: String?
-customName: String?          // 사용자가 임의로 지정한 커스텀 별칭 (null이면 stationName 표시)
+stationName: String
+chargerTypeName: String
+outputKw: String?
+status: String
+statusCode: Int
+statusUpdatedAt: String?
+lastFetchedAt: String
 sortOrder: Int
-createdAt: Instant
-lastStatus: ChargerStatus?
-lastStatusUpdatedAt: Instant?
-lastFetchedAt: Instant?
+customName: String?          // 사용자 별칭 (null이면 stationName 표시)
+stateSinceAt: String?        // 현재 상태가 시작된 시각 (충전 경과 시간 표기용)
+isWidget: Boolean            // 홈 위젯 표시 대상
+isFavorite: Boolean          // 즐겨찾기(알림 후보) 대상
+alertEnabled: Boolean        // 즐겨찾기 항목별 알림 수신 여부
 ```
+
+두 플래그가 모두 false가 되면 행을 삭제한다(`deleteOrphans`). v2 → v3 마이그레이션에서는
+기존 행을 위젯·즐겨찾기 양쪽에 넣어 기존 사용자의 기능이 끊기지 않게 한다.
 
 Room에는 개인정보를 저장하지 않는다. 위젯 설정에는 내부 DB ID가 아닌 안정적인 `statId/chgerId` 식별자만 사용한다.
 
@@ -203,7 +237,10 @@ Room에는 개인정보를 저장하지 않는다. 위젯 설정에는 내부 DB
 | `GET /v1/stations?zcode=&zscode=&page=` | 지도/지역 충전소 및 단말기 정보 |
 | `GET /v1/stations/{statId}` | 충전소 상세와 단말기 목록 |
 | `GET /v1/chargers/{statId}/{chgerId}/status` | 단일 단말기 최신 상태 |
-| `POST /v1/charger-statuses:batch` | 등록 단말기 상태 일괄 조회 |
+| `POST /v1/stations/batch-status` | 등록 단말기 상태 일괄 조회 (`maxAgeMs`로 허용 캐시 나이 지정) |
+| `POST /v1/alerts/subscribe` | FCM 토큰 + 감시 대상(`keys[].notify`) + 시간 범위 + 주기 등록 |
+| `POST /v1/alerts/unsubscribe` | 구독 해지 |
+| `GET /v1/alerts/stats` | 감시 규모 점검 |
 
 BFF 내부에서는 공공 API의 응답 코드와 HTTP 오류를 표준 오류(`RATE_LIMITED`, `UPSTREAM_UNAVAILABLE`, `INVALID_PARAMETER`)로 변환한다. `serviceKey`는 환경변수/비밀 저장소로 관리하고 로그·응답·소스에 출력하지 않는다.
 
@@ -254,3 +291,22 @@ BFF 내부에서는 공공 API의 응답 코드와 HTTP 오류를 표준 오류(
 - 위젯 갱신 주기와 배터리 정책: 기본 15분 WorkManager, 수동 새로고침 가능
 - 위젯 최대 등록 개수와 위젯 크기별 표시 필드
 - 앱의 기본 지역/현재 위치 권한 정책
+
+## 13. 디자인 언어 (Apple dark-tile)
+
+토큰은 `android/app/src/main/java/com/evsearch/app/presentation/theme/AppleTokens.kt`,
+공통 컴포넌트는 `presentation/common/AppleUi.kt`에 있다. 새 화면은 이 두 파일만 참조한다.
+
+- **표면**: 글로벌 내비 `#000000`, 캔버스 `#1d1d1f`, 타일 `#272729 / #2a2a2c / #252527`.
+  인접한 타일은 미세 단계차로만 구분한다.
+- **액센트는 하나**: `#2997ff`(dark surface용 Sky Link Blue). 포커스 링은 `#0071e3`.
+  두 번째 브랜드색은 만들지 않는다.
+- **의미색은 상태 표기 전용**: 충전 가능/충전 중/장애/점검/중지/예약에만 Apple system
+  color 계열을 쓰고, 버튼·링크·칩 같은 조작 요소에는 쓰지 않는다.
+- **깊이**: 그림자 없음. 표면색 변화와 1px 헤어라인(`rgba(255,255,255,0.08)`)만 사용한다.
+- **모양**: 유틸 버튼 8dp, Pearl 캡슐 11dp, 카드 타일 18dp, 액션·칩·검색은 pill.
+- **활자**: 굵기 사다리 300/400/600/700(500은 쓰지 않음), 본문 17sp/1.47, 17sp 이상에는
+  음수 자간, 미세 활자는 12sp/10sp.
+- **누름 상태**: 모든 버튼이 `scale(0.95)` 하나로 통일. hover 상태는 정의하지 않는다.
+- **위젯**: 같은 팔레트를 Glance drawable(`bg_widget_rounded`, `bg_card_*`)로 옮겼다.
+  홈 화면에서는 ‘충전 가능’ 한 상태만 초록 15% 틴트로 강조하고 나머지는 중립 타일이다.

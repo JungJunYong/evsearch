@@ -8,8 +8,6 @@ import com.evsearch.app.data.model.BatchStatusKey
 import com.evsearch.app.data.model.BatchStatusRequest
 import com.evsearch.app.data.model.Charger
 import com.evsearch.app.data.model.ChargerStation
-import com.evsearch.app.widget.ChargerWidget
-import androidx.glance.appwidget.updateAll
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
@@ -48,7 +46,14 @@ class ChargerRepository(
         }
     }
 
-    fun getSavedChargersFlow(): Flow<List<SavedChargerEntity>> = savedChargerDao.getAllSavedChargersFlow()
+    /** 홈 위젯에 표시할 목록. */
+    fun getWidgetChargersFlow(): Flow<List<SavedChargerEntity>> = savedChargerDao.getWidgetChargersFlow()
+
+    /** 즐겨찾기(빈자리 알림 대상) 목록. */
+    fun getFavoriteChargersFlow(): Flow<List<SavedChargerEntity>> = savedChargerDao.getFavoriteChargersFlow()
+
+    /** 두 목록의 합집합. 상세 화면의 등록 여부 표시에 사용. */
+    fun getTrackedChargersFlow(): Flow<List<SavedChargerEntity>> = savedChargerDao.getTrackedChargersFlow()
 
     private var inMemoryStationCache: Map<String, ChargerStation> = emptyMap()
 
@@ -196,34 +201,88 @@ class ChargerRepository(
         return Result.failure(Exception("충전소 정보를 찾을 수 없습니다."))
     }
 
-    suspend fun saveChargerToWidget(station: ChargerStation, charger: Charger) {
-        val key = "${station.statId}:${charger.chgerId}"
-        val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date())
-        val entity = SavedChargerEntity(
-            key = key,
-            statId = station.statId,
-            chgerId = charger.chgerId,
-            stationName = station.name,
-            chargerTypeName = charger.typeName,
-            outputKw = charger.outputKw,
-            status = charger.status,
-            statusCode = charger.statusCode,
-            statusUpdatedAt = charger.statusUpdatedAt,
-            lastFetchedAt = now
-        )
-        savedChargerDao.insertOrUpdate(entity)
+    private fun nowStamp(): String =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date())
 
-        if (context != null) {
-            com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(context)
+    private fun toEntity(
+        station: ChargerStation,
+        charger: Charger,
+        isWidget: Boolean,
+        isFavorite: Boolean
+    ) = SavedChargerEntity(
+        key = "${station.statId}:${charger.chgerId}",
+        statId = station.statId,
+        chgerId = charger.chgerId,
+        stationName = station.name,
+        chargerTypeName = charger.typeName,
+        outputKw = charger.outputKw,
+        status = charger.status,
+        statusCode = charger.statusCode,
+        statusUpdatedAt = charger.statusUpdatedAt,
+        lastFetchedAt = nowStamp(),
+        stateSinceAt = charger.lastChargeStartedAt ?: charger.statusUpdatedAt,
+        isWidget = isWidget,
+        isFavorite = isFavorite
+    )
+
+    /** 위젯 목록에 추가 (즐겨찾기 소속은 건드리지 않는다). */
+    suspend fun addChargerToWidget(station: ChargerStation, charger: Charger) {
+        val key = "${station.statId}:${charger.chgerId}"
+        val existing = savedChargerDao.getSavedChargerByKey(key)
+        if (existing != null) {
+            savedChargerDao.setWidgetFlag(key, true)
+        } else {
+            savedChargerDao.insertOrUpdate(toEntity(station, charger, isWidget = true, isFavorite = false))
         }
+        afterListChanged()
     }
 
-    suspend fun removeChargerFromWidget(key: String) {
-        savedChargerDao.deleteByKey(key)
-
-        if (context != null) {
-            com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(context)
+    /** 즐겨찾기 목록에 추가 (위젯 소속은 건드리지 않는다). */
+    suspend fun addChargerToFavorites(station: ChargerStation, charger: Charger) {
+        val key = "${station.statId}:${charger.chgerId}"
+        val existing = savedChargerDao.getSavedChargerByKey(key)
+        if (existing != null) {
+            savedChargerDao.setFavoriteFlag(key, true)
+        } else {
+            savedChargerDao.insertOrUpdate(toEntity(station, charger, isWidget = false, isFavorite = true))
         }
+        afterListChanged()
+    }
+
+    /** 여러 대를 한 번에 위젯 목록에 넣는다(서버 재등록은 마지막에 한 번만). */
+    suspend fun addChargersToWidget(station: ChargerStation, chargers: List<Charger>) {
+        for (charger in chargers) {
+            val key = "${station.statId}:${charger.chgerId}"
+            val existing = savedChargerDao.getSavedChargerByKey(key)
+            if (existing != null) {
+                savedChargerDao.setWidgetFlag(key, true)
+            } else {
+                savedChargerDao.insertOrUpdate(toEntity(station, charger, isWidget = true, isFavorite = false))
+            }
+        }
+        afterListChanged()
+    }
+
+    /** 하위 호환: 기존 호출부(위젯 등록). */
+    suspend fun saveChargerToWidget(station: ChargerStation, charger: Charger) =
+        addChargerToWidget(station, charger)
+
+    suspend fun removeChargerFromWidget(key: String) {
+        savedChargerDao.setWidgetFlag(key, false)
+        savedChargerDao.deleteOrphans()
+        afterListChanged()
+    }
+
+    suspend fun removeChargerFromFavorites(key: String) {
+        savedChargerDao.setFavoriteFlag(key, false)
+        savedChargerDao.deleteOrphans()
+        afterListChanged()
+    }
+
+    /** 즐겨찾기 항목별 알림 수신 여부. */
+    suspend fun setChargerAlertEnabled(key: String, enabled: Boolean) {
+        savedChargerDao.setAlertEnabled(key, enabled)
+        syncAlertSubscription()
     }
 
     suspend fun updateChargerCustomName(key: String, customName: String?) {
@@ -232,6 +291,14 @@ class ChargerRepository(
         if (context != null) {
             com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(context)
         }
+    }
+
+    /** 목록이 바뀌면 위젯을 다시 그리고 서버 감시 대상도 맞춘다. */
+    private suspend fun afterListChanged() {
+        if (context != null) {
+            com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(context)
+        }
+        syncAlertSubscription()
     }
 
     /** FCM 등록 토큰 획득 (Firebase 미설정 시 null). */
@@ -245,16 +312,47 @@ class ChargerRepository(
         }
     }
 
-    /** 빈자리 알림 구독/갱신: 현재 즐겨찾기 단말기를 대상으로 등록. */
-    suspend fun subscribeVacancyAlert(startMin: Int, endMin: Int, intervalSec: Int = 90): Result<Unit> {
+    /**
+     * 서버 감시 대상 동기화.
+     *
+     * - 즐겨찾기 + 항목 알림 ON → notify=true (빈자리 전환 시 푸시 알림)
+     * - 위젯 목록(및 알림 OFF 즐겨찾기) → notify=false (상태 변화 시 데이터 푸시로 위젯만 갱신)
+     *
+     * 알림 스위치가 꺼져 있으면 notify 대상 없이 위젯 동기화만 등록하고,
+     * 감시할 대상이 아무것도 없으면 구독을 해지한다.
+     */
+    suspend fun syncAlertSubscription(): Result<Unit> {
+        val ctx = context ?: return Result.failure(Exception("context 없음"))
         return try {
-            val ctx = context ?: return Result.failure(Exception("context 없음"))
-            val token = fcmToken() ?: return Result.failure(Exception("FCM 토큰을 가져올 수 없습니다 (Firebase 설정 확인)"))
+            val tracked = savedChargerDao.getTrackedChargers()
+            if (tracked.isEmpty()) {
+                unsubscribeVacancyAlert()
+                return Result.success(Unit)
+            }
+
+            val alertOn = com.evsearch.app.alert.AlertPrefs.getEnabled(ctx)
+            val keys = tracked.map {
+                com.evsearch.app.data.model.AlertWatchKey(
+                    statId = it.statId,
+                    chgerId = it.chgerId,
+                    notify = alertOn && it.isFavorite && it.alertEnabled
+                )
+            }
+
+            val token = fcmToken()
+                ?: return Result.failure(Exception("FCM 토큰을 가져올 수 없습니다 (Firebase 설정 확인)"))
             com.evsearch.app.alert.AlertPrefs.setToken(ctx, token)
-            val saved = savedChargerDao.getAllSavedChargers()
-            val keys = saved.map { com.evsearch.app.data.model.BatchStatusKey(it.statId, it.chgerId) }
+
             apiService.subscribeAlert(
-                com.evsearch.app.data.model.AlertSubscribeRequest(token, keys, startMin, endMin, intervalSec, true)
+                com.evsearch.app.data.model.AlertSubscribeRequest(
+                    token = token,
+                    keys = keys,
+                    startMin = com.evsearch.app.alert.AlertPrefs.getStartMin(ctx),
+                    endMin = com.evsearch.app.alert.AlertPrefs.getEndMin(ctx),
+                    intervalSec = com.evsearch.app.alert.AlertPrefs.getIntervalSec(ctx),
+                    enabled = true,
+                    silentSync = true
+                )
             )
             Result.success(Unit)
         } catch (e: Exception) {
@@ -263,7 +361,24 @@ class ChargerRepository(
         }
     }
 
-    /** 빈자리 알림 해제. */
+    /** 빈자리 알림 켜기: 설정 저장 후 감시 대상을 서버에 등록. */
+    suspend fun subscribeVacancyAlert(startMin: Int, endMin: Int, intervalSec: Int): Result<Unit> {
+        val ctx = context ?: return Result.failure(Exception("context 없음"))
+        com.evsearch.app.alert.AlertPrefs.setEnabled(ctx, true)
+        com.evsearch.app.alert.AlertPrefs.setStartMin(ctx, startMin)
+        com.evsearch.app.alert.AlertPrefs.setEndMin(ctx, endMin)
+        com.evsearch.app.alert.AlertPrefs.setIntervalSec(ctx, intervalSec)
+        return syncAlertSubscription()
+    }
+
+    /** 빈자리 알림 끄기: 알림만 끄고 위젯 실시간 동기화는 유지. */
+    suspend fun disableVacancyAlert(): Result<Unit> {
+        val ctx = context ?: return Result.success(Unit)
+        com.evsearch.app.alert.AlertPrefs.setEnabled(ctx, false)
+        return syncAlertSubscription()
+    }
+
+    /** 서버 구독 완전 해지. */
     suspend fun unsubscribeVacancyAlert(): Result<Unit> {
         return try {
             val ctx = context ?: return Result.success(Unit)
@@ -276,29 +391,37 @@ class ChargerRepository(
         }
     }
 
-    suspend fun refreshSavedChargersStatus(): Result<Unit> {
-        val saved = savedChargerDao.getAllSavedChargers()
+    /**
+     * 위젯 + 즐겨찾기 목록의 상태를 BFF에서 일괄 조회해 Room을 갱신한다.
+     *
+     * @param maxAgeMs 서버 캐시 허용 나이. 위젯 실시간 갱신 경로에서는 짧게(기본 20초) 준다.
+     */
+    suspend fun refreshTrackedChargersStatus(maxAgeMs: Long = 20_000L): Result<Unit> {
+        val saved = savedChargerDao.getTrackedChargers()
         if (saved.isEmpty()) return Result.success(Unit)
 
         val keys = saved.map { BatchStatusKey(it.statId, it.chgerId) }
         try {
-            val response = apiService.getBatchStatus(BatchStatusRequest(keys))
+            val response = apiService.getBatchStatus(BatchStatusRequest(keys, maxAgeMs))
             if (response.success) {
                 val resultsMap = response.data
-                val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date())
+                val now = nowStamp()
 
                 for (entity in saved) {
-                    val updated = resultsMap[entity.key]
-                    if (updated != null) {
-                        savedChargerDao.insertOrUpdate(
-                            entity.copy(
-                                status = updated.status,
-                                statusCode = updated.statusCode,
-                                statusUpdatedAt = updated.statusUpdatedAt ?: entity.statusUpdatedAt,
-                                lastFetchedAt = now
-                            )
-                        )
-                    }
+                    val updated = resultsMap[entity.key] ?: continue
+                    // 상태가 그대로면 기존 시작 시각을 유지하고, 바뀌었으면 서버가 준 시각으로 갱신한다.
+                    val stateSince = if (updated.status == entity.status)
+                        entity.stateSinceAt ?: updated.lastChargeStartedAt ?: updated.statusUpdatedAt
+                    else
+                        updated.lastChargeStartedAt ?: updated.statusUpdatedAt ?: now
+                    savedChargerDao.updateStatus(
+                        key = entity.key,
+                        status = updated.status,
+                        statusCode = updated.statusCode,
+                        statusUpdatedAt = updated.statusUpdatedAt ?: entity.statusUpdatedAt,
+                        stateSinceAt = stateSince,
+                        lastFetchedAt = now
+                    )
                 }
                 return Result.success(Unit)
             }
@@ -306,30 +429,31 @@ class ChargerRepository(
             // Fallback to local offline refresh
         }
 
-        // Offline Fallback for Saved Widget Chargers
+        // Offline Fallback: 동봉 데이터셋으로라도 마지막 상태를 유지
         val assetList = loadStationsFromAssets()
-        val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date())
+        val now = nowStamp()
         for (entity in saved) {
-            val station = assetList.find { it.statId == entity.statId }
-            if (station != null) {
-                val chg = station.chargers.find { it.chgerId == entity.chgerId } ?: station.chargers.firstOrNull()
-                if (chg != null) {
-                    savedChargerDao.insertOrUpdate(
-                        entity.copy(
-                            status = chg.status,
-                            statusCode = chg.statusCode,
-                            statusUpdatedAt = chg.statusUpdatedAt ?: entity.statusUpdatedAt,
-                            lastFetchedAt = now
-                        )
-                    )
-                }
+            val station = assetList.find { it.statId == entity.statId } ?: continue
+            val chg = station.chargers.find { it.chgerId == entity.chgerId } ?: station.chargers.firstOrNull()
+            if (chg != null) {
+                savedChargerDao.updateStatus(
+                    key = entity.key,
+                    status = chg.status,
+                    statusCode = chg.statusCode,
+                    statusUpdatedAt = chg.statusUpdatedAt ?: entity.statusUpdatedAt,
+                    stateSinceAt = if (chg.status == entity.status) entity.stateSinceAt else chg.statusUpdatedAt,
+                    lastFetchedAt = now
+                )
             }
         }
 
         if (context != null) {
-            ChargerWidget().updateAll(context)
+            com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(context)
         }
 
         return Result.success(Unit)
     }
+
+    /** 하위 호환 별칭. */
+    suspend fun refreshSavedChargersStatus(): Result<Unit> = refreshTrackedChargersStatus()
 }

@@ -5,21 +5,27 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,37 +37,41 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.launch
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.evsearch.app.data.local.AppDatabase
 import com.evsearch.app.data.api.BffApiService
+import com.evsearch.app.data.local.AppDatabase
 import com.evsearch.app.data.repository.ChargerRepository
+import com.evsearch.app.presentation.common.AppleHairline
+import com.evsearch.app.presentation.common.ApplePillButton
+import com.evsearch.app.presentation.common.PillStyle
 import com.evsearch.app.presentation.detail.StationDetailScreen
 import com.evsearch.app.presentation.detail.StationDetailViewModel
+import com.evsearch.app.presentation.favorites.FavoritesScreen
+import com.evsearch.app.presentation.favorites.FavoritesViewModel
 import com.evsearch.app.presentation.map.MapScreen
 import com.evsearch.app.presentation.map.MapViewModel
 import com.evsearch.app.presentation.saved.SavedChargersScreen
 import com.evsearch.app.presentation.saved.SavedChargersViewModel
+import com.evsearch.app.presentation.theme.Apple
 import com.evsearch.app.presentation.theme.EVSearchTheme
 import com.evsearch.app.widget.ChargerWidgetReceiver
+import com.evsearch.app.widget.WidgetSyncScheduler
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 시스템 바(상태바/하단 제스처 영역)를 앱 다크 배경에 맞춘다 (밝은 아이콘)
-        val systemBarColor = android.graphics.Color.parseColor("#0A0E17")
+        // 시스템 바는 글로벌 내비와 같은 순수 검정
+        val systemBarColor = android.graphics.Color.BLACK
         window.statusBarColor = systemBarColor
         window.navigationBarColor = systemBarColor
         androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -87,6 +97,8 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(applicationContext)
+            // 앱 진입 시 서버 감시 대상(위젯·즐겨찾기)을 최신 상태로 맞춘다.
+            repository.syncAlertSubscription()
         }
 
         // 빈자리 알림: 알림 채널 초기화 + FCM 토큰 확보/저장
@@ -100,13 +112,14 @@ class MainActivity : ComponentActivity() {
             // Firebase 미설정 등: 알림 비활성 (앱 동작에는 영향 없음)
         }
 
-        val initialStatId = intent?.getStringExtra("statId")
+        // 알림 탭으로 진입한 경우 해당 충전소 상세로 바로 이동
+        val initialStatId = intent?.getStringExtra("open_statId") ?: intent?.getStringExtra("statId")
 
         setContent {
             EVSearchTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = Apple.C.Canvas
                 ) {
                     FoldableAdaptiveAppNavigation(
                         repository = repository,
@@ -119,16 +132,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        WidgetSyncScheduler.syncNow(applicationContext)
         lifecycleScope.launch {
             com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(applicationContext)
         }
     }
 }
 
+private const val TAB_MAP = 0
+private const val TAB_FAVORITES = 1
+private const val TAB_WIDGET = 2
+
 /**
- * Galaxy Fold / One UI 9.0 Adaptive Layout with Bottom Tabs:
- * - Unfolded / Wide Screen (>600dp): Map left pane, Detail right pane
- * - Folded / Compact Screen (<=600dp): Tab navigation (Map / Saved Widgets) + Detail stack
+ * 넓은 화면(폴더블 펼침): 지도 좌측 + 상세/목록 우측
+ * 좁은 화면: 하단 탭 (검색 / 즐겨찾기 / 위젯) + 상세 스택
  */
 @Composable
 fun FoldableAdaptiveAppNavigation(
@@ -137,41 +154,33 @@ fun FoldableAdaptiveAppNavigation(
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isWideScreen = maxWidth >= 600.dp
-        var selectedTab by remember { mutableIntStateOf(0) }
+        var selectedTab by remember { mutableIntStateOf(TAB_MAP) }
+        val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
 
         if (isWideScreen) {
-            // Galaxy Fold Unfolded Dual-Pane Mode
             var selectedStatId by remember { mutableStateOf(initialStatId) }
-            val mapViewModel: MapViewModel = viewModel(
-                factory = MapViewModel.Factory(repository)
-            )
-            val savedViewModel: SavedChargersViewModel = viewModel(
-                factory = SavedChargersViewModel.Factory(repository)
-            )
+            var rightPaneTab by remember { mutableIntStateOf(TAB_FAVORITES) }
+            val mapViewModel: MapViewModel = viewModel(factory = MapViewModel.Factory(repository))
+            val savedViewModel: SavedChargersViewModel =
+                viewModel(factory = SavedChargersViewModel.Factory(repository, appContext))
+            val favoritesViewModel: FavoritesViewModel =
+                viewModel(factory = FavoritesViewModel.Factory(repository, appContext))
 
-            BackHandler(enabled = selectedStatId != null) {
-                selectedStatId = null
-            }
+            BackHandler(enabled = selectedStatId != null) { selectedStatId = null }
 
             Row(modifier = Modifier.fillMaxSize()) {
-                // Left Pane: Map Screen
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                ) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     MapScreen(
                         viewModel = mapViewModel,
                         onStationClick = { statId -> selectedStatId = statId }
                     )
                 }
 
-                // Right Pane: Saved Widget Chargers + Station Detail
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.surface)
+                        .background(Apple.C.Canvas)
                 ) {
                     if (selectedStatId != null) {
                         val detailViewModel: StationDetailViewModel = viewModel(
@@ -183,32 +192,56 @@ fun FoldableAdaptiveAppNavigation(
                             onBackClick = { selectedStatId = null }
                         )
                     } else {
-                        // 상세 미선택 시 위젯 충전기 관리 목록을 오른쪽 패널에 표시
-                        SavedChargersScreen(
-                            viewModel = savedViewModel,
-                            onStationClick = { statId -> selectedStatId = statId }
-                        )
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Apple.C.Black)
+                                    .padding(horizontal = Apple.Sp.md, vertical = Apple.Sp.xs),
+                                horizontalArrangement = Arrangement.spacedBy(Apple.Sp.xs)
+                            ) {
+                                ApplePillButton(
+                                    text = "즐겨찾기",
+                                    compact = true,
+                                    style = if (rightPaneTab == TAB_FAVORITES) PillStyle.Primary else PillStyle.Ghost,
+                                    onClick = { rightPaneTab = TAB_FAVORITES }
+                                )
+                                ApplePillButton(
+                                    text = "위젯",
+                                    compact = true,
+                                    style = if (rightPaneTab == TAB_WIDGET) PillStyle.Primary else PillStyle.Ghost,
+                                    onClick = { rightPaneTab = TAB_WIDGET }
+                                )
+                            }
+                            AppleHairline()
+                            if (rightPaneTab == TAB_WIDGET) {
+                                SavedChargersScreen(
+                                    viewModel = savedViewModel,
+                                    onStationClick = { statId -> selectedStatId = statId }
+                                )
+                            } else {
+                                FavoritesScreen(
+                                    viewModel = favoritesViewModel,
+                                    onStationClick = { statId -> selectedStatId = statId }
+                                )
+                            }
+                        }
                     }
                 }
             }
         } else {
-            // Compact Mode: Bottom Tab Navigation (Map / Saved Widgets)
             val navController = rememberNavController()
-            // 현재 백스택 엔트리의 라우트를 직접 관찰 -> 탭 바 표시 여부 결정
             val currentBackStackEntry by navController.currentBackStackEntryAsState()
             val currentRoute = currentBackStackEntry?.destination?.route
 
             Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
+                containerColor = Apple.C.Canvas,
                 bottomBar = {
-                    OneUI9BottomTabBar(
+                    AppleBottomTabBar(
                         selectedTab = selectedTab,
                         onTabSelected = { tab ->
-                            android.util.Log.d("MainActivity", "onTabSelected: tab=$tab, currentRoute=$currentRoute")
                             selectedTab = tab
-                            // 상세 화면에서 지도 탭으로 돌아올 때 백스택 정리
-                            if (tab == 0 && currentRoute?.startsWith("detail") == true) {
-                                android.util.Log.d("MainActivity", "popBackStack to map")
+                            if (tab == TAB_MAP && currentRoute?.startsWith("detail") == true) {
                                 navController.popBackStack("map", inclusive = false)
                             }
                         }
@@ -217,19 +250,29 @@ fun FoldableAdaptiveAppNavigation(
             ) { innerPadding ->
                 Box(modifier = Modifier.padding(innerPadding)) {
                     when (selectedTab) {
-                        0 -> CompactMapNavHost(
+                        TAB_MAP -> CompactMapNavHost(
                             repository = repository,
                             navController = navController,
                             initialStatId = initialStatId
                         )
-                        else -> {
-                            val savedViewModel: SavedChargersViewModel = viewModel(
-                                factory = SavedChargersViewModel.Factory(repository)
+                        TAB_FAVORITES -> {
+                            val favoritesViewModel: FavoritesViewModel =
+                                viewModel(factory = FavoritesViewModel.Factory(repository, appContext))
+                            FavoritesScreen(
+                                viewModel = favoritesViewModel,
+                                onStationClick = { statId ->
+                                    selectedTab = TAB_MAP
+                                    navController.navigate("detail/$statId")
+                                }
                             )
+                        }
+                        else -> {
+                            val savedViewModel: SavedChargersViewModel =
+                                viewModel(factory = SavedChargersViewModel.Factory(repository, appContext))
                             SavedChargersScreen(
                                 viewModel = savedViewModel,
                                 onStationClick = { statId ->
-                                    selectedTab = 0
+                                    selectedTab = TAB_MAP
                                     navController.navigate("detail/$statId")
                                 }
                             )
@@ -241,9 +284,7 @@ fun FoldableAdaptiveAppNavigation(
     }
 }
 
-/**
- * Compact 단일 패널 모드의 지도 ↔ 상세 내비게이션
- */
+/** Compact 단일 패널 모드의 지도 ↔ 상세 내비게이션 */
 @Composable
 private fun CompactMapNavHost(
     repository: ChargerRepository,
@@ -255,9 +296,7 @@ private fun CompactMapNavHost(
         startDestination = if (initialStatId != null) "detail/$initialStatId" else "map"
     ) {
         composable("map") {
-            val mapViewModel: MapViewModel = viewModel(
-                factory = MapViewModel.Factory(repository)
-            )
+            val mapViewModel: MapViewModel = viewModel(factory = MapViewModel.Factory(repository))
             MapScreen(
                 viewModel = mapViewModel,
                 onStationClick = { statId -> navController.navigate("detail/$statId") }
@@ -279,71 +318,53 @@ private fun CompactMapNavHost(
 }
 
 /**
- * Samsung One UI 9.0 Styled Bottom Tab Bar
- * - 28dp 상단 곡률 컨테이너, 틸 액센트 인디케이터
+ * Apple 계열 하단 내비 — 순수 검정 바, 상단 헤어라인 하나, 12sp 라벨, 단일 액센트.
+ * M3 NavigationBar의 인디케이터·리플·라벨 애니메이션을 쓰지 않고 직접 배치한다.
  */
 @Composable
-private fun OneUI9BottomTabBar(
+private fun AppleBottomTabBar(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        tonalElevation = 3.dp
-    ) {
-        NavigationBar(
-            containerColor = Color.Transparent,
-            tonalElevation = 0.dp
+    Column(modifier = Modifier.fillMaxWidth().background(Apple.C.Black)) {
+        AppleHairline()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            NavigationBarItem(
-                selected = selectedTab == 0,
-                onClick = { onTabSelected(0) },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "충전소 검색"
-                    )
-                },
-                label = {
-                    Text(
-                        "검색",
-                        fontSize = 12.sp,
-                        fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium
-                    )
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                )
-            )
-            NavigationBarItem(
-                selected = selectedTab == 1,
-                onClick = { onTabSelected(1) },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "위젯 충전기"
-                    )
-                },
-                label = {
-                    Text(
-                        "위젯",
-                        fontSize = 12.sp,
-                        fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium
-                    )
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                )
-            )
+            AppleTabItem(TAB_MAP, selectedTab, onTabSelected, Icons.Default.Search, "검색", Modifier.weight(1f))
+            AppleTabItem(TAB_FAVORITES, selectedTab, onTabSelected, Icons.Default.Star, "즐겨찾기", Modifier.weight(1f))
+            AppleTabItem(TAB_WIDGET, selectedTab, onTabSelected, Icons.AutoMirrored.Filled.List, "위젯", Modifier.weight(1f))
         }
+    }
+}
+
+@Composable
+private fun AppleTabItem(
+    tab: Int,
+    selectedTab: Int,
+    onTabSelected: (Int) -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    val selected = selectedTab == tab
+    val tint = if (selected) Apple.C.Accent else Apple.C.TextFaint
+    Column(
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onTabSelected(tab) },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(imageVector = icon, contentDescription = label, tint = tint, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.height(4.dp))
+        Text(text = label, style = Apple.T.NavLink, color = tint, maxLines = 1)
     }
 }

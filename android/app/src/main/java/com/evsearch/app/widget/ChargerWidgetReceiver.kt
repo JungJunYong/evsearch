@@ -8,12 +8,6 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.updateAll
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
-import java.util.concurrent.TimeUnit
 
 object WidgetUpdateHelper {
     suspend fun updateAllWidgets(context: Context) {
@@ -79,25 +73,9 @@ open class ChargerWidgetReceiver : GlanceAppWidgetReceiver() {
     }
 
     companion object {
+        /** 위젯 즉시 동기화 + 사용자 주기 체인 + 15분 안전망 등록. */
         fun scheduleBackgroundWork(context: Context) {
-            val workManager = WorkManager.getInstance(context)
-
-            val immediateWork = OneTimeWorkRequestBuilder<ChargerWidgetWorker>().build()
-            workManager.enqueueUniqueWork(
-                "ChargerWidgetImmediateSync",
-                ExistingWorkPolicy.REPLACE,
-                immediateWork
-            )
-
-            val periodicWork = PeriodicWorkRequestBuilder<ChargerWidgetWorker>(
-                15, TimeUnit.MINUTES
-            ).build()
-
-            workManager.enqueueUniquePeriodicWork(
-                "ChargerWidgetUpdateWork",
-                ExistingPeriodicWorkPolicy.UPDATE,
-                periodicWork
-            )
+            WidgetSyncScheduler.scheduleAll(context)
         }
     }
 }

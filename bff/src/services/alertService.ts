@@ -6,23 +6,42 @@ import { getMessaging, Messaging } from 'firebase-admin/messaging';
 import { getChargerBatchStatus } from './kecoService.js';
 
 /**
- * 빈자리 알림(서버 주도 + FCM).
+ * 빈자리 알림 + 위젯 실시간 동기화 (서버 주도 + FCM).
  *
- * 앱이 FCM 토큰 + 감시 대상 단말기 + 시간대를 등록하면, BFF가 주기적으로
- * 상태를 조회해 '빈자리(AVAILABLE) 전환'을 감지하고 해당 토큰으로 FCM 푸시를 보낸다.
+ * 앱이 FCM 토큰 + 감시 대상 단말기 + 시간 범위 + 확인 주기를 등록하면, BFF가 그 주기로
+ * 상태를 조회한다.
+ * - notify=true 대상이 '빈자리(AVAILABLE)로 전환'되면 알림 푸시를 보낸다(시간 범위 안에서만).
+ * - 시간 범위와 무관하게, 감시 대상 중 무엇이든 상태가 바뀌면 데이터 전용 푸시를 보내
+ *   앱이 홈 위젯을 즉시 다시 그리게 한다(silentSync).
+ *
  * Firebase 서비스계정 키는 FIREBASE_SERVICE_ACCOUNT(파일 경로 또는 JSON 문자열)로 주입한다.
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALERTS_FILE = path.join(__dirname, '..', 'data', 'alerts.json');
 
+/** 서버 폴링 최소/최대 간격(초). 앱의 선택지(30/60/120/300초)를 담는다. */
+export const MIN_INTERVAL_SEC = 30;
+export const MAX_INTERVAL_SEC = 1800;
+/** 폴링 루프 tick. 구독별 간격은 tick 안에서 판정한다. */
+const TICK_MS = 15_000;
+
+export interface WatchKey {
+  statId: string;
+  chgerId: string;
+  /** true 면 빈자리 전환 시 알림 푸시. false 면 위젯 동기화 전용. */
+  notify: boolean;
+}
+
 export interface AlertSubscription {
-  token: string;                                   // FCM 등록 토큰
-  keys: Array<{ statId: string; chgerId: string }>; // 감시 단말기 (즐겨찾기)
-  startMin: number;                                // 감시 시작 (0~1439, 로컬 분)
-  endMin: number;                                  // 감시 종료
-  intervalSec: number;                             // 조회 간격(60~180)
+  token: string;                 // FCM 등록 토큰
+  keys: WatchKey[];              // 감시 단말기 (즐겨찾기 + 위젯 목록)
+  startMin: number;              // 감시 시작 (0~1439, KST 분). start == end 면 종일
+  endMin: number;                // 감시 종료
+  intervalSec: number;           // 조회 간격
   enabled: boolean;
+  /** 상태 변화 시 데이터 전용 푸시로 위젯을 깨울지 여부 */
+  silentSync: boolean;
   updatedAt: string;
 }
 
@@ -30,13 +49,47 @@ const subscriptions = new Map<string, AlertSubscription>();
 // 직전 상태 (token|statId:chgerId -> status). 빈자리 '전환'만 알리기 위함.
 const lastStatus = new Map<string, string>();
 const lastPolledAt = new Map<string, number>();
+// 데이터 푸시 과다 전송 방지 (token -> epoch ms)
+const lastSyncPushAt = new Map<string, number>();
+const SYNC_PUSH_MIN_GAP_MS = 20_000;
 
 // ---- 영속 ----------------------------------------------------------------
+function normalizeSub(raw: any): AlertSubscription {
+  const keys: WatchKey[] = Array.isArray(raw?.keys)
+    ? raw.keys
+        .filter((k: any) => k?.statId && k?.chgerId)
+        .map((k: any) => ({
+          statId: String(k.statId),
+          chgerId: String(k.chgerId),
+          // 구버전 페이로드(notify 없음)는 알림 대상으로 본다.
+          notify: k.notify !== false,
+        }))
+    : [];
+  return {
+    token: String(raw.token),
+    keys,
+    startMin: Number.isFinite(raw?.startMin) ? Number(raw.startMin) : 0,
+    endMin: Number.isFinite(raw?.endMin) ? Number(raw.endMin) : 0,
+    intervalSec: clampInterval(raw?.intervalSec),
+    enabled: raw?.enabled !== false,
+    silentSync: raw?.silentSync !== false,
+    updatedAt: raw?.updatedAt || new Date().toISOString(),
+  };
+}
+
+function clampInterval(v: any): number {
+  const n = Number.isFinite(v) ? Number(v) : 60;
+  return Math.min(MAX_INTERVAL_SEC, Math.max(MIN_INTERVAL_SEC, n));
+}
+
 function loadSubs(): void {
   try {
     if (fs.existsSync(ALERTS_FILE)) {
-      const raw = JSON.parse(fs.readFileSync(ALERTS_FILE, 'utf-8')) as AlertSubscription[];
-      for (const s of raw) subscriptions.set(s.token, s);
+      const raw = JSON.parse(fs.readFileSync(ALERTS_FILE, 'utf-8')) as any[];
+      for (const s of raw) {
+        if (!s?.token) continue;
+        subscriptions.set(String(s.token), normalizeSub(s));
+      }
       console.log(`[Alert] loaded ${subscriptions.size} subscriptions`);
     }
   } catch (e) {
@@ -88,9 +141,8 @@ function ensureMessaging(): Messaging | null {
 
 // ---- 구독 관리 -----------------------------------------------------------
 export function upsertSubscription(sub: AlertSubscription): void {
-  sub.updatedAt = new Date().toISOString();
-  sub.intervalSec = Math.min(180, Math.max(60, sub.intervalSec || 90));
-  subscriptions.set(sub.token, sub);
+  const normalized = normalizeSub({ ...sub, updatedAt: new Date().toISOString() });
+  subscriptions.set(normalized.token, normalized);
   persistSubs();
 }
 
@@ -100,7 +152,20 @@ export function removeSubscription(token: string): void {
     if (k.startsWith(token + '|')) lastStatus.delete(k);
   }
   lastPolledAt.delete(token);
+  lastSyncPushAt.delete(token);
   persistSubs();
+}
+
+export function subscriptionStats() {
+  let notifyKeys = 0;
+  let watchKeys = 0;
+  for (const s of subscriptions.values()) {
+    for (const k of s.keys) {
+      watchKeys += 1;
+      if (k.notify) notifyKeys += 1;
+    }
+  }
+  return { subscriptions: subscriptions.size, watchKeys, notifyKeys };
 }
 
 // ---- 시간대 판정 ---------------------------------------------------------
@@ -124,30 +189,60 @@ export async function pollAndNotify(): Promise<void> {
 
   for (const sub of subscriptions.values()) {
     if (!sub.enabled || sub.keys.length === 0) continue;
-    if (!inWindow(sub.startMin, sub.endMin, now)) continue;
 
-    // 구독별 조회 간격 준수
+    const notifyWindowOpen = inWindow(sub.startMin, sub.endMin, now);
+    const wantsNotify = sub.keys.some((k) => k.notify);
+    // 알림 시간대 밖이고 위젯 동기화도 안 쓰면 굳이 조회하지 않는다.
+    if (!sub.silentSync && (!wantsNotify || !notifyWindowOpen)) continue;
+
+    // 구독별 조회 간격 준수 (알림 시간대 밖에는 위젯 동기화용으로 느리게 본다)
+    const effectiveIntervalSec = notifyWindowOpen && wantsNotify
+      ? sub.intervalSec
+      : Math.max(sub.intervalSec, 300);
     const last = lastPolledAt.get(sub.token) || 0;
-    if (nowMs - last < sub.intervalSec * 1000) continue;
+    if (nowMs - last < effectiveIntervalSec * 1000) continue;
     lastPolledAt.set(sub.token, nowMs);
 
     try {
-      const results = await getChargerBatchStatus(sub.keys);
-      const fresh: Array<{ statId: string; chgerId: string; name?: string }> = [];
+      // 캐시 나이를 조회 간격의 절반으로 제한해 '준실시간'을 보장한다.
+      const results = await getChargerBatchStatus(
+        sub.keys.map((k) => ({ statId: k.statId, chgerId: k.chgerId })),
+        { maxAgeMs: Math.floor((effectiveIntervalSec * 1000) / 2) }
+      );
+
+      const vacancies: Array<{ statId: string; chgerId: string }> = [];
+      let changed = false;
 
       for (const key of sub.keys) {
         const r = results[`${key.statId}:${key.chgerId}`];
         if (!r) continue;
         const k = `${sub.token}|${key.statId}:${key.chgerId}`;
         const prev = lastStatus.get(k);
+        if (prev !== undefined && prev !== r.status) changed = true;
         // non-AVAILABLE -> AVAILABLE 전환만 알림 (첫 관측은 baseline)
-        if (prev !== undefined && prev !== 'AVAILABLE' && r.status === 'AVAILABLE') {
-          fresh.push({ statId: key.statId, chgerId: key.chgerId });
+        if (
+          key.notify &&
+          notifyWindowOpen &&
+          prev !== undefined &&
+          prev !== 'AVAILABLE' &&
+          r.status === 'AVAILABLE'
+        ) {
+          vacancies.push({ statId: key.statId, chgerId: key.chgerId });
         }
         lastStatus.set(k, r.status);
       }
 
-      if (fresh.length > 0) await sendVacancyPush(sub.token, fresh);
+      if (vacancies.length > 0) {
+        // 알림 푸시에도 data를 실어 앱이 위젯까지 함께 갱신한다.
+        await sendVacancyPush(sub.token, vacancies);
+        lastSyncPushAt.set(sub.token, nowMs);
+      } else if (changed && sub.silentSync) {
+        const lastSync = lastSyncPushAt.get(sub.token) || 0;
+        if (nowMs - lastSync >= SYNC_PUSH_MIN_GAP_MS) {
+          lastSyncPushAt.set(sub.token, nowMs);
+          await sendWidgetSyncPush(sub.token);
+        }
+      }
     } catch (e) {
       console.warn(`[Alert] poll failed for token ${sub.token.slice(0, 8)}…:`, e);
     }
@@ -161,11 +256,11 @@ async function sendVacancyPush(
   const m = ensureMessaging();
   const count = chargers.length;
   const first = chargers[0];
-  const title = count === 1 ? '🔌 충전기 빈자리 발생' : `🔌 빈자리 ${count}대 발생`;
+  const title = count === 1 ? '충전기 빈자리' : `빈자리 ${count}대`;
   const body =
     count === 1
-      ? `${first.chgerId}번 단말기가 지금 충전 가능합니다.`
-      : `${first.chgerId}번 외 ${count - 1}대가 지금 충전 가능합니다.`;
+      ? `${first.chgerId} 단말기가 지금 충전 가능합니다.`
+      : `${first.chgerId} 외 ${count - 1}대가 지금 충전 가능합니다.`;
 
   if (!m) {
     console.log(`[Alert] (push disabled) would notify ${token.slice(0, 8)}…: ${body}`);
@@ -184,28 +279,50 @@ async function sendVacancyPush(
         statId: first.statId,
         chgerId: first.chgerId,
         count: String(count),
+        title,
+        body,
       },
     });
     console.log(`[Alert] pushed to ${token.slice(0, 8)}…: ${body}`);
   } catch (e: any) {
-    // 토큰 만료/무효 시 구독 제거
-    const code = e?.errorInfo?.code || e?.code;
-    if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-argument') {
-      console.warn(`[Alert] stale token removed: ${token.slice(0, 8)}…`);
-      removeSubscription(token);
-    } else {
-      console.warn('[Alert] send failed:', e);
-    }
+    handleSendError(token, e);
+  }
+}
+
+/** 데이터 전용 푸시: 알림 표시 없이 앱이 위젯만 즉시 갱신한다. */
+async function sendWidgetSyncPush(token: string): Promise<void> {
+  const m = ensureMessaging();
+  if (!m) return;
+  try {
+    await m.send({
+      token,
+      android: { priority: 'high' },
+      data: { type: 'widget_sync', at: String(Date.now()) },
+    });
+    console.log(`[Alert] widget_sync pushed to ${token.slice(0, 8)}…`);
+  } catch (e: any) {
+    handleSendError(token, e);
+  }
+}
+
+function handleSendError(token: string, e: any): void {
+  // 토큰 만료/무효 시 구독 제거
+  const code = e?.errorInfo?.code || e?.code;
+  if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-argument') {
+    console.warn(`[Alert] stale token removed: ${token.slice(0, 8)}…`);
+    removeSubscription(token);
+  } else {
+    console.warn('[Alert] send failed:', e);
   }
 }
 
 let pollTimer: NodeJS.Timeout | null = null;
-/** 60초마다 폴링(구독별 간격은 pollAndNotify 내부에서 준수). */
+/** 15초 tick으로 돌며 구독별 간격(최소 30초)을 지킨다. */
 export function startAlertPolling(): void {
   if (pollTimer) return;
   ensureMessaging(); // 초기화 시도(로그)
   pollTimer = setInterval(() => {
     pollAndNotify().catch((e) => console.warn('[Alert] poll cycle error:', e));
-  }, 60_000);
-  console.log('[Alert] polling started (60s cycle)');
+  }, TICK_MS);
+  console.log(`[Alert] polling started (${TICK_MS / 1000}s tick, min interval ${MIN_INTERVAL_SEC}s)`);
 }

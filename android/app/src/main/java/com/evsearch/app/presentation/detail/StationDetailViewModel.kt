@@ -15,7 +15,10 @@ data class StationDetailUiState(
     val isLoading: Boolean = false,
     val station: ChargerStation? = null,
     val errorMessage: String? = null,
-    val savedChargerKeys: Set<String> = emptySet(),
+    /** 위젯 목록에 들어 있는 key 집합 */
+    val widgetKeys: Set<String> = emptySet(),
+    /** 즐겨찾기 목록에 들어 있는 key 집합 */
+    val favoriteKeys: Set<String> = emptySet(),
     val widgetSavedSuccessMessage: String? = null
 )
 
@@ -49,22 +52,23 @@ class StationDetailViewModel(
 
     private fun observeSavedChargers() {
         viewModelScope.launch {
-            repository.getSavedChargersFlow().collect { savedList ->
-                val keySet = savedList.map { it.key }.toSet()
-                _uiState.value = _uiState.value.copy(savedChargerKeys = keySet)
+            repository.getTrackedChargersFlow().collect { list ->
+                _uiState.value = _uiState.value.copy(
+                    widgetKeys = list.filter { it.isWidget }.map { it.key }.toSet(),
+                    favoriteKeys = list.filter { it.isFavorite }.map { it.key }.toSet()
+                )
             }
         }
     }
 
+    /** 앞의 6대를 위젯 목록에 한 번에 넣는다(홈 위젯 최대 표시 수). */
     fun registerFirst6Chargers() {
         val station = _uiState.value.station ?: return
         val chargersToSave = station.chargers.sortedBy { it.chgerId }.take(6)
         viewModelScope.launch {
-            chargersToSave.forEach { charger ->
-                repository.saveChargerToWidget(station, charger)
-            }
+            repository.addChargersToWidget(station, chargersToSave)
             _uiState.value = _uiState.value.copy(
-                widgetSavedSuccessMessage = "${station.name} 충전기 ${chargersToSave.size}대가 위젯에 일괄 등록되었습니다!"
+                widgetSavedSuccessMessage = "${chargersToSave.size}대를 위젯에 추가했습니다."
             )
         }
     }
@@ -72,17 +76,29 @@ class StationDetailViewModel(
     fun toggleWidgetRegistration(charger: Charger) {
         val station = _uiState.value.station ?: return
         val key = "${station.statId}:${charger.chgerId}"
-        val displayName = charger.chargerCode ?: charger.chgerId
         viewModelScope.launch {
-            if (_uiState.value.savedChargerKeys.contains(key)) {
+            if (_uiState.value.widgetKeys.contains(key)) {
                 repository.removeChargerFromWidget(key)
-                _uiState.value = _uiState.value.copy(
-                    widgetSavedSuccessMessage = "충전기 [${displayName}] 위젯 등록이 해제되었습니다."
-                )
+                _uiState.value = _uiState.value.copy(widgetSavedSuccessMessage = "위젯에서 제거했습니다.")
             } else {
-                repository.saveChargerToWidget(station, charger)
+                repository.addChargerToWidget(station, charger)
+                _uiState.value = _uiState.value.copy(widgetSavedSuccessMessage = "위젯에 추가했습니다.")
+            }
+        }
+    }
+
+    /** 즐겨찾기(빈자리 알림 대상) 토글. 위젯 목록과는 독립적이다. */
+    fun toggleFavorite(charger: Charger) {
+        val station = _uiState.value.station ?: return
+        val key = "${station.statId}:${charger.chgerId}"
+        viewModelScope.launch {
+            if (_uiState.value.favoriteKeys.contains(key)) {
+                repository.removeChargerFromFavorites(key)
+                _uiState.value = _uiState.value.copy(widgetSavedSuccessMessage = "즐겨찾기에서 제거했습니다.")
+            } else {
+                repository.addChargerToFavorites(station, charger)
                 _uiState.value = _uiState.value.copy(
-                    widgetSavedSuccessMessage = "충전기 [${displayName}] 번이 홈 화면 위젯에 등록되었습니다!"
+                    widgetSavedSuccessMessage = "즐겨찾기에 추가했습니다. 알림 설정은 즐겨찾기 탭에서 조정할 수 있습니다."
                 )
             }
         }
