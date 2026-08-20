@@ -24,7 +24,9 @@ import { getChargerBatchStatus } from './kecoService.js';
  */
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ALERTS_FILE = path.join(__dirname, '..', 'data', 'alerts.json');
+// 컨테이너를 새로 만들어도 구독이 살아남도록 경로를 밖으로 뺄 수 있게 한다.
+// (docker-compose에서 ALERTS_FILE=/app/state/alerts.json + 볼륨 마운트)
+const ALERTS_FILE = process.env.ALERTS_FILE || path.join(__dirname, '..', 'data', 'alerts.json');
 
 /** 회차별 무작위 조회 간격(초). 실시간성 ↔ 과호출 방지의 균형점. */
 export const MIN_INTERVAL_SEC = 30;

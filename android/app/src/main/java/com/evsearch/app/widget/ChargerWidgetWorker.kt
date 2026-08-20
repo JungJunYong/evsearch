@@ -32,6 +32,12 @@ class ChargerWidgetWorker(
             // Glance 위젯 UI 갱신
             WidgetUpdateHelper.updateAllWidgets(context)
 
+            // 서버가 재배포/재시작되면 구독이 사라질 수 있으므로, 알림이 켜져 있으면
+            // 주기 갱신 때마다 감시 대상을 다시 등록해 알림이 조용히 끊기는 것을 막는다.
+            if (AlertPrefs.getEnabled(context)) {
+                repository.syncAlertSubscription()
+            }
+
             if (result.isSuccess) {
                 AlertPrefs.setLastSyncAt(context, System.currentTimeMillis())
                 Result.success()

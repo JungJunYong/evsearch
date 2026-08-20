@@ -18,13 +18,20 @@ services:
       USE_LIVE_API: ${USE_LIVE_API:-false}
       # 빈자리 알림 FCM: 아래 volumes로 마운트한 서비스계정 키 경로
       FIREBASE_SERVICE_ACCOUNT: /app/service-account.json
+      # 알림 구독 저장 위치(볼륨). 컨테이너 재생성 후에도 구독이 유지된다.
+      ALERTS_FILE: /app/state/alerts.json
     volumes:
       # 서버의 bff/service-account.json 을 컨테이너에 읽기전용 마운트
       # (이미지에 포함되지 않으며 git에도 올라가지 않음)
       - ./service-account.json:/app/service-account.json:ro
+      # 알림 구독 영속 저장소
+      - evsearch-state:/app/state
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8084/health"]
       interval: 30s
       timeout: 5s
       start_period: 10s
       retries: 3
+
+volumes:
+  evsearch-state:
