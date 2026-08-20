@@ -47,13 +47,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.evsearch.app.alert.AlertPrefs
 import com.evsearch.app.data.local.SavedChargerEntity
 import com.evsearch.app.data.model.ChargerStatus
 import com.evsearch.app.presentation.common.AppleGlobalNav
 import com.evsearch.app.presentation.common.AppleHairline
 import com.evsearch.app.presentation.common.ApplePillButton
-import com.evsearch.app.presentation.common.AppleChipRow
 import com.evsearch.app.presentation.common.AppleEmptyState
 import com.evsearch.app.presentation.common.AppleStatusLabel
 import com.evsearch.app.presentation.common.AppleSwitchRow
@@ -134,8 +132,7 @@ fun FavoritesScreen(
                             state = uiState,
                             onMasterChange = viewModel::setAlertEnabled,
                             onWindowChange = viewModel::setWindow,
-                            onAllDayChange = viewModel::setAllDay,
-                            onIntervalChange = viewModel::setIntervalSec
+                            onAllDayChange = viewModel::setAllDay
                         )
                         Spacer(Modifier.height(Apple.Sp.xs))
                     }
@@ -230,8 +227,7 @@ private fun AlertSettingsTile(
     state: FavoritesUiState,
     onMasterChange: (Boolean) -> Unit,
     onWindowChange: (Int, Int) -> Unit,
-    onAllDayChange: (Boolean) -> Unit,
-    onIntervalChange: (Int) -> Unit
+    onAllDayChange: (Boolean) -> Unit
 ) {
     val ctx = LocalContext.current
     val s = state.settings
@@ -308,24 +304,18 @@ private fun AlertSettingsTile(
                 AppleHairline()
                 Spacer(Modifier.height(Apple.Sp.md))
 
-                // 확인 주기
-                Text("확인 주기", style = Apple.T.BodyStrong, color = Apple.C.Text)
+                // 조회 방식 안내 (주기는 서버가 정한다)
+                Text("확인 방식", style = Apple.T.BodyStrong, color = Apple.C.Text)
                 Spacer(Modifier.height(Apple.Sp.xxs))
                 Text(
-                    "짧게 두면 더 실시간에 가깝게 받고, 길게 두면 데이터·배터리를 아낍니다.",
+                    "감시 시간대 동안 서버가 30~60초 사이 무작위 간격으로 상태를 확인하고, " +
+                        "이전과 달라진 순간에만 알림과 위젯 갱신을 보냅니다.",
                     style = Apple.T.FinePrint,
                     color = Apple.C.TextFaint
                 )
-                Spacer(Modifier.height(Apple.Sp.sm))
-                AppleChipRow(
-                    options = AlertPrefs.INTERVAL_OPTIONS.map { fmtDuration(it) to it },
-                    selected = s.intervalSec,
-                    onSelect = onIntervalChange
-                )
-
-                Spacer(Modifier.height(Apple.Sp.sm))
+                Spacer(Modifier.height(Apple.Sp.xs))
                 Text(
-                    "서버가 이 주기로 상태를 확인하고, ‘충전 중 → 충전 가능’으로 바뀌는 순간에만 알립니다.",
+                    "알림을 끄면 서버 조회도 멈춥니다. 그때는 15분 주기 또는 새로고침으로만 갱신됩니다.",
                     style = Apple.T.MicroLegal,
                     color = Apple.C.TextFaint
                 )

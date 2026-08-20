@@ -87,7 +87,7 @@ class FavoritesViewModel(
                     _uiState.value = _uiState.value.copy(message = "먼저 즐겨찾기에 충전기를 추가해 주세요.")
                     return@launch
                 }
-                val r = repository.subscribeVacancyAlert(s.startMin, s.endMin, s.intervalSec)
+                val r = repository.subscribeVacancyAlert(s.startMin, s.endMin)
                 reloadSettings()
                 _uiState.value = _uiState.value.copy(
                     message = if (r.isSuccess) "빈자리 알림을 켰습니다." else "알림 설정 실패: ${r.exceptionOrNull()?.message}"
@@ -114,17 +114,6 @@ class FavoritesViewModel(
 
     fun setAllDay(allDay: Boolean) {
         if (allDay) setWindow(0, 0) else setWindow(18 * 60, 23 * 60)
-    }
-
-    /** 서버 확인 주기 변경 (초). */
-    fun setIntervalSec(sec: Int) {
-        viewModelScope.launch {
-            AlertPrefs.setIntervalSec(appContext, sec)
-            reloadSettings()
-            if (_uiState.value.settings.enabled) {
-                repository.syncAlertSubscription()
-            }
-        }
     }
 
     /** 항목별 알림 수신 여부. */

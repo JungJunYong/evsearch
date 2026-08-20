@@ -3,7 +3,10 @@ package com.evsearch.app.alert
 import android.content.Context
 
 /**
- * 빈자리 알림 / 위젯 자동 갱신 설정(로컬 저장).
+ * 빈자리 알림 설정(로컬 저장).
+ *
+ * 위젯 갱신 주기는 사용자 설정이 아니다: 서버가 변화를 감지했을 때 보내는 푸시로 즉시
+ * 갱신하고, 그 밖에는 15분 고정 주기(WidgetSyncScheduler)로만 돈다.
  * 시간대는 하루 기준 '분'(0~1439)으로 저장하며, start == end 는 '종일'을 뜻한다.
  */
 object AlertPrefs {
@@ -12,16 +15,9 @@ object AlertPrefs {
     private const val K_START = "start_min"
     private const val K_END = "end_min"
     private const val K_INTERVAL = "interval_sec"
-    private const val K_WIDGET_INTERVAL = "widget_interval_sec"
     private const val K_TOKEN = "fcm_token"
     private const val K_LAST_SYNC = "last_sync_at"
     private const val K_LAST_PUSH = "last_push_at"
-
-    /** 알림 확인 주기 선택지(초). 서버 폴링 최소 간격과 맞춘다. */
-    val INTERVAL_OPTIONS = listOf(30, 60, 120, 300)
-
-    /** 위젯 자동 갱신 주기 선택지(초). */
-    val WIDGET_INTERVAL_OPTIONS = listOf(60, 180, 300, 900, 1800)
 
     private fun sp(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -41,14 +37,10 @@ object AlertPrefs {
         sp(context).edit().putInt(K_START, 0).putInt(K_END, 0).apply()
     }
 
-    /** 알림 확인 주기(초). 기본 60초. */
+    /**
+     * 하위 호환용 값. 실제 조회 간격은 서버가 30~60초 무작위로 정한다(과호출 방지).
+     */
     fun getIntervalSec(context: Context) = sp(context).getInt(K_INTERVAL, 60)
-    fun setIntervalSec(context: Context, v: Int) = sp(context).edit().putInt(K_INTERVAL, v).apply()
-
-    /** 위젯 자동 갱신 주기(초). 기본 300초. */
-    fun getWidgetIntervalSec(context: Context) = sp(context).getInt(K_WIDGET_INTERVAL, 300)
-    fun setWidgetIntervalSec(context: Context, v: Int) =
-        sp(context).edit().putInt(K_WIDGET_INTERVAL, v).apply()
 
     fun getToken(context: Context): String? = sp(context).getString(K_TOKEN, null)
     fun setToken(context: Context, token: String) = sp(context).edit().putString(K_TOKEN, token).apply()

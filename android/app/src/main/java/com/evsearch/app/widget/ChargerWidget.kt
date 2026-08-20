@@ -188,17 +188,16 @@ class ChargerWidget4x2 : GlanceAppWidget() {
     override val sizeMode = SizeMode.Single
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val chargers = AppDatabase.getInstance(context).savedChargerDao().getWidgetChargers()
-        val intervalSec = AlertPrefs.getWidgetIntervalSec(context)
         provideContent {
             GlanceTheme {
                 if (chargers.isEmpty()) WidgetCommonUi.EmptyContent(context)
-                else Content(context, chargers.take(6), intervalSec)
+                else Content(context, chargers.take(6))
             }
         }
     }
 
     @Composable
-    private fun Content(context: Context, chargers: List<SavedChargerEntity>, intervalSec: Int) {
+    private fun Content(context: Context, chargers: List<SavedChargerEntity>) {
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
@@ -228,7 +227,7 @@ class ChargerWidget4x2 : GlanceAppWidget() {
                 }
 
                 Spacer(modifier = GlanceModifier.height(6.dp))
-                WidgetCommonUi.Footer(chargers, intervalSec)
+                WidgetCommonUi.Footer(chargers)
             }
         }
     }
@@ -268,17 +267,16 @@ class ChargerWidget4x3 : GlanceAppWidget() {
     override val sizeMode = SizeMode.Single
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val chargers = AppDatabase.getInstance(context).savedChargerDao().getWidgetChargers()
-        val intervalSec = AlertPrefs.getWidgetIntervalSec(context)
         provideContent {
             GlanceTheme {
                 if (chargers.isEmpty()) WidgetCommonUi.EmptyContent(context)
-                else Content(context, chargers.take(6), intervalSec)
+                else Content(context, chargers.take(6))
             }
         }
     }
 
     @Composable
-    private fun Content(context: Context, chargers: List<SavedChargerEntity>, intervalSec: Int) {
+    private fun Content(context: Context, chargers: List<SavedChargerEntity>) {
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
@@ -308,7 +306,7 @@ class ChargerWidget4x3 : GlanceAppWidget() {
                 }
 
                 Spacer(modifier = GlanceModifier.height(7.dp))
-                WidgetCommonUi.Footer(chargers, intervalSec)
+                WidgetCommonUi.Footer(chargers)
             }
         }
     }
@@ -410,10 +408,10 @@ object WidgetCommonUi {
 
     /** 미세 활자 푸터: 갱신 주기와 앱 진입 안내. */
     @Composable
-    fun Footer(chargers: List<SavedChargerEntity>, intervalSec: Int) {
+    fun Footer(chargers: List<SavedChargerEntity>) {
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "${formatTimeOnly(chargers.firstOrNull()?.lastFetchedAt ?: "")} 동기화 · ${formatInterval(intervalSec)} 자동",
+                text = "${formatTimeOnly(chargers.firstOrNull()?.lastFetchedAt ?: "")} 동기화 · 15분 주기",
                 style = TextStyle(color = W.provider(W.Faint), fontSize = 10.sp),
                 maxLines = 1
             )
@@ -479,12 +477,6 @@ object WidgetCommonUi {
         // 상태가 얼마나 지속됐는지(충전 시작 후 경과)를 함께 보여준다.
         val since = StateDuration.shortLabel(c.stateSinceAt, c.statusUpdatedAt)
         return if (since != null) "$head · $since" else "$head · ${c.outputKw ?: "7"}kW"
-    }
-
-    fun formatInterval(sec: Int): String = when {
-        sec < 60 -> "${sec}초"
-        sec % 3600 == 0 -> "${sec / 3600}시간"
-        else -> "${sec / 60}분"
     }
 
     fun formatCleanName(rawName: String, customName: String?): String {

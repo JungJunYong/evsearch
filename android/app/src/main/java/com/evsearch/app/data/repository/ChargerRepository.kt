@@ -8,8 +8,6 @@ import com.evsearch.app.data.model.BatchStatusKey
 import com.evsearch.app.data.model.BatchStatusRequest
 import com.evsearch.app.data.model.Charger
 import com.evsearch.app.data.model.ChargerStation
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -20,31 +18,6 @@ class ChargerRepository(
     private val savedChargerDao: SavedChargerDao,
     private val context: Context? = null
 ) {
-
-    private var cachedAssetStations: List<ChargerStation>? = null
-
-    private fun loadStationsFromAssets(): List<ChargerStation> {
-        if (cachedAssetStations != null) return cachedAssetStations!!
-        return try {
-            if (context != null) {
-                val jsonString = context.assets.open("mockStations.json").bufferedReader().use { it.readText() }
-                val root = com.google.gson.JsonParser.parseString(jsonString).asJsonObject
-
-                // { success, count, data: [...] } 형태이므로 data 배열 안의 내용을 파싱
-                val dataElement = root.getAsJsonArray("data")
-                val type = object : TypeToken<List<ChargerStation>>() {}.type
-                val list: List<ChargerStation> = Gson().fromJson(dataElement, type)
-
-                cachedAssetStations = list
-                list
-            } else {
-                emptyList()
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
-        }
-    }
 
     /** 홈 위젯에 표시할 목록. */
     fun getWidgetChargersFlow(): Flow<List<SavedChargerEntity>> = savedChargerDao.getWidgetChargersFlow()
@@ -66,33 +39,18 @@ class ChargerRepository(
     }
 
     suspend fun getStations(zcode: String? = null, zscode: String? = null): Result<List<ChargerStation>> {
-        // First attempt online API call
-        try {
+        return try {
             val targetZcode = if (zcode == "all") null else zcode
             val response = apiService.getStations(zcode = targetZcode, zscode = zscode)
-            if (response.success && response.data.isNotEmpty()) {
+            if (response.success) {
                 cacheStationsInMemory(response.data)
-                return Result.success(response.data)
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception("충전소 정보를 불러오지 못했습니다."))
             }
         } catch (e: Exception) {
-            // Fallback to local embedded asset dataset
-        }
-
-        // Seamless Offline Fallback
-        val assetList = loadStationsFromAssets()
-        val filtered = if (zcode.isNullOrBlank()) {
-            assetList
-        } else {
-            assetList.filter { it.zcode == zcode }
-        }
-        cacheStationsInMemory(filtered)
-
-        return if (filtered.isNotEmpty()) {
-            Result.success(filtered)
-        } else if (assetList.isNotEmpty()) {
-            Result.success(assetList)
-        } else {
-            Result.failure(Exception("No station data available offline"))
+            e.printStackTrace()
+            Result.failure(e)
         }
     }
 
@@ -175,30 +133,22 @@ class ChargerRepository(
     suspend fun searchChargevStations(keyword: String): Result<List<ChargerStation>> = searchStations(keyword)
 
     suspend fun getStationDetail(statId: String): Result<ChargerStation> {
-        // 1. Instant check in memory cache (0ms delay!)
-        inMemoryStationCache[statId]?.let {
-            return Result.success(it)
-        }
+        // 1) 방금 받은 목록/검색 결과가 있으면 즉시 표시 (같은 BFF 응답의 메모리 캐시)
+        inMemoryStationCache[statId]?.let { return Result.success(it) }
 
-        // 2. Instant check in local asset
-        val assetList = loadStationsFromAssets()
-        assetList.find { it.statId == statId }?.let {
-            cacheStationsInMemory(listOf(it))
-            return Result.success(it)
-        }
-
-        // 3. Online API call if not in local cache
-        try {
+        // 2) BFF 상세 조회
+        return try {
             val response = apiService.getStationDetail(statId)
             if (response.success) {
                 cacheStationsInMemory(listOf(response.data))
-                return Result.success(response.data)
+                Result.success(response.data)
+            } else {
+                Result.failure(Exception("충전소 정보를 찾을 수 없습니다."))
             }
         } catch (e: Exception) {
-            // Fallback
+            e.printStackTrace()
+            Result.failure(Exception("충전소 정보를 불러오지 못했습니다."))
         }
-
-        return Result.failure(Exception("충전소 정보를 찾을 수 없습니다."))
     }
 
     private fun nowStamp(): String =
@@ -315,27 +265,28 @@ class ChargerRepository(
     /**
      * 서버 감시 대상 동기화.
      *
-     * - 즐겨찾기 + 항목 알림 ON → notify=true (빈자리 전환 시 푸시 알림)
-     * - 위젯 목록(및 알림 OFF 즐겨찾기) → notify=false (상태 변화 시 데이터 푸시로 위젯만 갱신)
-     *
-     * 알림 스위치가 꺼져 있으면 notify 대상 없이 위젯 동기화만 등록하고,
-     * 감시할 대상이 아무것도 없으면 구독을 해지한다.
+     * 서버 폴링은 **알림을 켰을 때만** 돌아야 하므로, 알림이 꺼져 있거나 감시 대상이 없으면
+     * 구독을 해지한다. 알림이 켜져 있으면 즐겨찾기(항목 알림 ON)는 notify=true로,
+     * 위젯 전용 항목은 notify=false로 올려 상태 변화 시 위젯만 갱신하게 한다.
      */
     suspend fun syncAlertSubscription(): Result<Unit> {
         val ctx = context ?: return Result.failure(Exception("context 없음"))
         return try {
+            val alertOn = com.evsearch.app.alert.AlertPrefs.getEnabled(ctx)
             val tracked = savedChargerDao.getTrackedChargers()
-            if (tracked.isEmpty()) {
+            val notifyTargets = tracked.count { it.isFavorite && it.alertEnabled }
+
+            // 알림 OFF 또는 알릴 대상이 없으면 서버 조회를 멈춘다(15분 주기·수동 새로고침만).
+            if (!alertOn || tracked.isEmpty() || notifyTargets == 0) {
                 unsubscribeVacancyAlert()
                 return Result.success(Unit)
             }
 
-            val alertOn = com.evsearch.app.alert.AlertPrefs.getEnabled(ctx)
             val keys = tracked.map {
                 com.evsearch.app.data.model.AlertWatchKey(
                     statId = it.statId,
                     chgerId = it.chgerId,
-                    notify = alertOn && it.isFavorite && it.alertEnabled
+                    notify = it.isFavorite && it.alertEnabled
                 )
             }
 
@@ -362,12 +313,11 @@ class ChargerRepository(
     }
 
     /** 빈자리 알림 켜기: 설정 저장 후 감시 대상을 서버에 등록. */
-    suspend fun subscribeVacancyAlert(startMin: Int, endMin: Int, intervalSec: Int): Result<Unit> {
+    suspend fun subscribeVacancyAlert(startMin: Int, endMin: Int): Result<Unit> {
         val ctx = context ?: return Result.failure(Exception("context 없음"))
         com.evsearch.app.alert.AlertPrefs.setEnabled(ctx, true)
         com.evsearch.app.alert.AlertPrefs.setStartMin(ctx, startMin)
         com.evsearch.app.alert.AlertPrefs.setEndMin(ctx, endMin)
-        com.evsearch.app.alert.AlertPrefs.setIntervalSec(ctx, intervalSec)
         return syncAlertSubscription()
     }
 
@@ -396,62 +346,46 @@ class ChargerRepository(
      *
      * @param maxAgeMs 서버 캐시 허용 나이. 위젯 실시간 갱신 경로에서는 짧게(기본 20초) 준다.
      */
+    /**
+     * 위젯 + 즐겨찾기 목록의 상태를 BFF에서 일괄 조회해 Room을 갱신한다.
+     *
+     * 데이터 출처는 BFF(evsearch.wiqio.com) 하나뿐이다. 조회가 실패하면 아무것도 쓰지 않고
+     * Room의 마지막 정상 상태를 그대로 유지한다(값을 임의로 만들지 않는다).
+     *
+     * @param maxAgeMs 서버 캐시 허용 나이. 위젯 갱신 경로에서는 짧게(기본 20초) 준다.
+     */
     suspend fun refreshTrackedChargersStatus(maxAgeMs: Long = 20_000L): Result<Unit> {
         val saved = savedChargerDao.getTrackedChargers()
         if (saved.isEmpty()) return Result.success(Unit)
 
         val keys = saved.map { BatchStatusKey(it.statId, it.chgerId) }
-        try {
+        return try {
             val response = apiService.getBatchStatus(BatchStatusRequest(keys, maxAgeMs))
-            if (response.success) {
-                val resultsMap = response.data
-                val now = nowStamp()
+            if (!response.success) return Result.failure(Exception("상태를 불러오지 못했습니다."))
 
-                for (entity in saved) {
-                    val updated = resultsMap[entity.key] ?: continue
-                    // 상태가 그대로면 기존 시작 시각을 유지하고, 바뀌었으면 서버가 준 시각으로 갱신한다.
-                    val stateSince = if (updated.status == entity.status)
-                        entity.stateSinceAt ?: updated.lastChargeStartedAt ?: updated.statusUpdatedAt
-                    else
-                        updated.lastChargeStartedAt ?: updated.statusUpdatedAt ?: now
-                    savedChargerDao.updateStatus(
-                        key = entity.key,
-                        status = updated.status,
-                        statusCode = updated.statusCode,
-                        statusUpdatedAt = updated.statusUpdatedAt ?: entity.statusUpdatedAt,
-                        stateSinceAt = stateSince,
-                        lastFetchedAt = now
-                    )
-                }
-                return Result.success(Unit)
-            }
-        } catch (e: Exception) {
-            // Fallback to local offline refresh
-        }
-
-        // Offline Fallback: 동봉 데이터셋으로라도 마지막 상태를 유지
-        val assetList = loadStationsFromAssets()
-        val now = nowStamp()
-        for (entity in saved) {
-            val station = assetList.find { it.statId == entity.statId } ?: continue
-            val chg = station.chargers.find { it.chgerId == entity.chgerId } ?: station.chargers.firstOrNull()
-            if (chg != null) {
+            val resultsMap = response.data
+            val now = nowStamp()
+            for (entity in saved) {
+                val updated = resultsMap[entity.key] ?: continue
+                // 상태가 그대로면 기존 시작 시각을 유지하고, 바뀌었으면 서버가 준 시각으로 갱신한다.
+                val stateSince = if (updated.status == entity.status)
+                    entity.stateSinceAt ?: updated.lastChargeStartedAt ?: updated.statusUpdatedAt
+                else
+                    updated.lastChargeStartedAt ?: updated.statusUpdatedAt ?: now
                 savedChargerDao.updateStatus(
                     key = entity.key,
-                    status = chg.status,
-                    statusCode = chg.statusCode,
-                    statusUpdatedAt = chg.statusUpdatedAt ?: entity.statusUpdatedAt,
-                    stateSinceAt = if (chg.status == entity.status) entity.stateSinceAt else chg.statusUpdatedAt,
+                    status = updated.status,
+                    statusCode = updated.statusCode,
+                    statusUpdatedAt = updated.statusUpdatedAt ?: entity.statusUpdatedAt,
+                    stateSinceAt = stateSince,
                     lastFetchedAt = now
                 )
             }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
         }
-
-        if (context != null) {
-            com.evsearch.app.widget.WidgetUpdateHelper.updateAllWidgets(context)
-        }
-
-        return Result.success(Unit)
     }
 
     /** 하위 호환 별칭. */

@@ -16,7 +16,7 @@ export const alertRouter = Router();
  *   token,
  *   keys: [{ statId, chgerId, notify }],   // notify 생략 시 true (구버전 호환)
  *   startMin, endMin,                       // 감시 시간 범위 (start == end 이면 종일)
- *   intervalSec,                            // 확인 주기 (서버가 30~1800초로 clamp)
+ *   intervalSec,                            // (하위 호환) 실제 간격은 서버가 30~60초 무작위로 정한다
  *   enabled, silentSync
  * }
  * 앱이 FCM 토큰 + 감시 대상 + 시간 범위 + 주기를 등록/갱신한다.
@@ -47,7 +47,14 @@ alertRouter.post('/subscribe', (req: Request, res: Response) => {
       updatedAt: new Date().toISOString(),
     };
     upsertSubscription(sub);
-    res.json({ success: true, data: { intervalSec: Math.min(MAX_INTERVAL_SEC, Math.max(MIN_INTERVAL_SEC, sub.intervalSec)), keys: sub.keys.length } });
+    res.json({
+      success: true,
+      data: {
+        keys: sub.keys.length,
+        notifyKeys: sub.keys.filter((k) => k.notify).length,
+        pollIntervalSec: `${MIN_INTERVAL_SEC}~${MAX_INTERVAL_SEC} (random)`,
+      },
+    });
   } catch (error: any) {
     console.error('Error in POST /v1/alerts/subscribe:', error);
     res.status(500).json({ success: false, error: { code: 'ALERT_ERROR', message: error.message || 'subscribe failed' } });
@@ -71,5 +78,8 @@ alertRouter.post('/unsubscribe', (req: Request, res: Response) => {
 
 /** GET /v1/alerts/stats — 감시 규모 확인용(운영 점검). */
 alertRouter.get('/stats', (_req: Request, res: Response) => {
-  res.json({ success: true, data: { ...subscriptionStats(), minIntervalSec: MIN_INTERVAL_SEC, maxIntervalSec: MAX_INTERVAL_SEC } });
+  res.json({
+    success: true,
+    data: { ...subscriptionStats(), pollMinSec: MIN_INTERVAL_SEC, pollMaxSec: MAX_INTERVAL_SEC },
+  });
 });

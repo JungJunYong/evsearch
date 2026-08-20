@@ -38,18 +38,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.evsearch.app.alert.AlertPrefs
 import com.evsearch.app.data.local.SavedChargerEntity
 import com.evsearch.app.data.model.ChargerStatus
-import com.evsearch.app.presentation.common.AppleChipRow
 import com.evsearch.app.presentation.common.AppleEmptyState
 import com.evsearch.app.presentation.common.AppleGlobalNav
 import com.evsearch.app.presentation.common.AppleHairline
 import com.evsearch.app.presentation.common.AppleStatusLabel
 import com.evsearch.app.presentation.common.AppleTile
+import com.evsearch.app.presentation.common.ApplePillButton
+import com.evsearch.app.presentation.common.PillStyle
 import com.evsearch.app.presentation.common.AppleUtilityButton
 import com.evsearch.app.presentation.common.StateDuration
-import com.evsearch.app.presentation.favorites.fmtDuration
 import com.evsearch.app.presentation.favorites.relativeTime
 import com.evsearch.app.presentation.theme.Apple
 
@@ -83,7 +82,7 @@ fun SavedChargersScreen(
         topBar = {
             AppleGlobalNav(
                 category = "위젯",
-                detail = "${uiState.savedChargers.size}개 단말기 · ${fmtDuration(uiState.widgetIntervalSec)} 자동 갱신",
+                detail = "${uiState.savedChargers.size}개 단말기 · 15분 주기 + 변화 시 즉시",
                 actions = {
                     if (uiState.isRefreshing) {
                         CircularProgressIndicator(
@@ -125,10 +124,10 @@ fun SavedChargersScreen(
                 ) {
                     item {
                         WidgetSyncTile(
-                            intervalSec = uiState.widgetIntervalSec,
                             lastSyncAt = uiState.lastSyncAt,
                             lastPushAt = uiState.lastPushAt,
-                            onIntervalChange = viewModel::setWidgetIntervalSec
+                            onRefresh = { viewModel.refreshStatus() },
+                            isRefreshing = uiState.isRefreshing
                         )
                         Spacer(Modifier.height(Apple.Sp.xs))
                     }
@@ -228,28 +227,31 @@ fun SavedChargersScreen(
     }
 }
 
-/** 위젯 실시간 갱신 설정 타일. */
+/** 갱신 방식 안내 타일 — 주기는 15분 고정, 즉시 갱신은 서버 푸시와 새로고침. */
 @Composable
 private fun WidgetSyncTile(
-    intervalSec: Int,
     lastSyncAt: Long,
     lastPushAt: Long,
-    onIntervalChange: (Int) -> Unit
+    onRefresh: () -> Unit,
+    isRefreshing: Boolean
 ) {
     AppleTile(tone = Apple.C.Tile1) {
         Column(modifier = Modifier.padding(Apple.Sp.md)) {
-            Text("자동 갱신", style = Apple.T.BodyStrong, color = Apple.C.Text)
+            Text("갱신 방식", style = Apple.T.BodyStrong, color = Apple.C.Text)
             Spacer(Modifier.height(Apple.Sp.xxs))
             Text(
-                "상태가 바뀌면 서버가 곧바로 위젯을 깨웁니다. 아래 주기는 푸시가 막혔을 때를 위한 보조 갱신입니다.",
+                "빈자리 알림이 켜져 있으면 서버가 상태 변화를 감지한 순간 위젯을 즉시 갱신합니다. " +
+                    "그 밖에는 15분 주기와 새로고침으로만 갱신합니다.",
                 style = Apple.T.FinePrint,
                 color = Apple.C.TextFaint
             )
             Spacer(Modifier.height(Apple.Sp.sm))
-            AppleChipRow(
-                options = AlertPrefs.WIDGET_INTERVAL_OPTIONS.map { fmtDuration(it) to it },
-                selected = intervalSec,
-                onSelect = onIntervalChange
+            ApplePillButton(
+                text = if (isRefreshing) "새로고침 중" else "지금 새로고침",
+                compact = true,
+                enabled = !isRefreshing,
+                style = PillStyle.Ghost,
+                onClick = onRefresh
             )
             Spacer(Modifier.height(Apple.Sp.sm))
             AppleHairline()

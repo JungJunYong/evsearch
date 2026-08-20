@@ -8,11 +8,17 @@ import { getChargerBatchStatus } from './kecoService.js';
 /**
  * 빈자리 알림 + 위젯 실시간 동기화 (서버 주도 + FCM).
  *
- * 앱이 FCM 토큰 + 감시 대상 단말기 + 시간 범위 + 확인 주기를 등록하면, BFF가 그 주기로
- * 상태를 조회한다.
- * - notify=true 대상이 '빈자리(AVAILABLE)로 전환'되면 알림 푸시를 보낸다(시간 범위 안에서만).
- * - 시간 범위와 무관하게, 감시 대상 중 무엇이든 상태가 바뀌면 데이터 전용 푸시를 보내
- *   앱이 홈 위젯을 즉시 다시 그리게 한다(silentSync).
+ * 폴링 규칙
+ * - **알림을 켠 구독만** 조회한다(앱은 알림을 끄면 구독을 해지한다).
+ * - 사용자가 정한 **감시 시간 범위 안에서만** 조회한다.
+ * - 조회 간격은 매 회차마다 **30~60초 무작위**. 실시간성을 유지하면서 업스트림 과호출과
+ *   동시 요청 몰림(thundering herd)을 함께 피한다.
+ * - 조회 결과가 **이전과 달라졌을 때만** 푸시를 보낸다.
+ *   · notify=true 대상이 빈자리로 전환 → 알림 푸시(+data)
+ *   · 그 밖의 상태 변화 → 데이터 전용 푸시(type=widget_sync)로 앱이 위젯만 갱신
+ *
+ * 시간 범위 밖이거나 알림이 꺼져 있으면 서버는 아무것도 조회하지 않는다. 그 구간의 갱신은
+ * 앱의 15분 고정 주기와 사용자의 새로고침이 담당한다.
  *
  * Firebase 서비스계정 키는 FIREBASE_SERVICE_ACCOUNT(파일 경로 또는 JSON 문자열)로 주입한다.
  */
@@ -20,11 +26,17 @@ import { getChargerBatchStatus } from './kecoService.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALERTS_FILE = path.join(__dirname, '..', 'data', 'alerts.json');
 
-/** 서버 폴링 최소/최대 간격(초). 앱의 선택지(30/60/120/300초)를 담는다. */
+/** 회차별 무작위 조회 간격(초). 실시간성 ↔ 과호출 방지의 균형점. */
 export const MIN_INTERVAL_SEC = 30;
-export const MAX_INTERVAL_SEC = 1800;
-/** 폴링 루프 tick. 구독별 간격은 tick 안에서 판정한다. */
-const TICK_MS = 15_000;
+export const MAX_INTERVAL_SEC = 60;
+/** 폴링 루프 tick. 다음 조회 시점은 tick 안에서 판정한다. */
+const TICK_MS = 5_000;
+
+/** 30~60초 사이 무작위 지연(ms). */
+function nextDelayMs(): number {
+  const span = MAX_INTERVAL_SEC - MIN_INTERVAL_SEC;
+  return (MIN_INTERVAL_SEC + Math.random() * span) * 1000;
+}
 
 export interface WatchKey {
   statId: string;
@@ -38,7 +50,7 @@ export interface AlertSubscription {
   keys: WatchKey[];              // 감시 단말기 (즐겨찾기 + 위젯 목록)
   startMin: number;              // 감시 시작 (0~1439, KST 분). start == end 면 종일
   endMin: number;                // 감시 종료
-  intervalSec: number;           // 조회 간격
+  intervalSec: number;           // (하위 호환) 앱이 보내는 값. 실제 간격은 서버가 30~60초 무작위로 정한다
   enabled: boolean;
   /** 상태 변화 시 데이터 전용 푸시로 위젯을 깨울지 여부 */
   silentSync: boolean;
@@ -48,7 +60,8 @@ export interface AlertSubscription {
 const subscriptions = new Map<string, AlertSubscription>();
 // 직전 상태 (token|statId:chgerId -> status). 빈자리 '전환'만 알리기 위함.
 const lastStatus = new Map<string, string>();
-const lastPolledAt = new Map<string, number>();
+/** token -> 다음 조회 예정 시각(epoch ms). 회차마다 무작위로 재설정한다. */
+const nextPollAt = new Map<string, number>();
 // 데이터 푸시 과다 전송 방지 (token -> epoch ms)
 const lastSyncPushAt = new Map<string, number>();
 const SYNC_PUSH_MIN_GAP_MS = 20_000;
@@ -78,8 +91,9 @@ function normalizeSub(raw: any): AlertSubscription {
 }
 
 function clampInterval(v: any): number {
+  // 보관만 한다(진단용). 실제 조회 간격은 nextDelayMs()가 정한다.
   const n = Number.isFinite(v) ? Number(v) : 60;
-  return Math.min(MAX_INTERVAL_SEC, Math.max(MIN_INTERVAL_SEC, n));
+  return Math.min(1800, Math.max(1, n));
 }
 
 function loadSubs(): void {
@@ -151,7 +165,7 @@ export function removeSubscription(token: string): void {
   for (const k of Array.from(lastStatus.keys())) {
     if (k.startsWith(token + '|')) lastStatus.delete(k);
   }
-  lastPolledAt.delete(token);
+  nextPollAt.delete(token);
   lastSyncPushAt.delete(token);
   persistSubs();
 }
@@ -188,26 +202,25 @@ export async function pollAndNotify(): Promise<void> {
   const nowMs = Date.now();
 
   for (const sub of subscriptions.values()) {
+    // 알림을 켠 구독만, 그리고 감시 시간 범위 안에서만 조회한다.
     if (!sub.enabled || sub.keys.length === 0) continue;
+    if (!sub.keys.some((k) => k.notify)) continue;
+    if (!inWindow(sub.startMin, sub.endMin, now)) {
+      // 시간대를 벗어나면 다음 진입 시 곧바로 한 번 보도록 예정 시각을 비운다.
+      nextPollAt.delete(sub.token);
+      continue;
+    }
 
-    const notifyWindowOpen = inWindow(sub.startMin, sub.endMin, now);
-    const wantsNotify = sub.keys.some((k) => k.notify);
-    // 알림 시간대 밖이고 위젯 동기화도 안 쓰면 굳이 조회하지 않는다.
-    if (!sub.silentSync && (!wantsNotify || !notifyWindowOpen)) continue;
-
-    // 구독별 조회 간격 준수 (알림 시간대 밖에는 위젯 동기화용으로 느리게 본다)
-    const effectiveIntervalSec = notifyWindowOpen && wantsNotify
-      ? sub.intervalSec
-      : Math.max(sub.intervalSec, 300);
-    const last = lastPolledAt.get(sub.token) || 0;
-    if (nowMs - last < effectiveIntervalSec * 1000) continue;
-    lastPolledAt.set(sub.token, nowMs);
+    // 회차마다 30~60초 무작위 간격
+    const due = nextPollAt.get(sub.token);
+    if (due !== undefined && nowMs < due) continue;
+    nextPollAt.set(sub.token, nowMs + nextDelayMs());
 
     try {
-      // 캐시 나이를 조회 간격의 절반으로 제한해 '준실시간'을 보장한다.
+      // 캐시 나이를 최소 간격의 절반으로 제한해 준실시간을 보장한다.
       const results = await getChargerBatchStatus(
         sub.keys.map((k) => ({ statId: k.statId, chgerId: k.chgerId })),
-        { maxAgeMs: Math.floor((effectiveIntervalSec * 1000) / 2) }
+        { maxAgeMs: (MIN_INTERVAL_SEC * 1000) / 2 }
       );
 
       const vacancies: Array<{ statId: string; chgerId: string }> = [];
@@ -220,20 +233,14 @@ export async function pollAndNotify(): Promise<void> {
         const prev = lastStatus.get(k);
         if (prev !== undefined && prev !== r.status) changed = true;
         // non-AVAILABLE -> AVAILABLE 전환만 알림 (첫 관측은 baseline)
-        if (
-          key.notify &&
-          notifyWindowOpen &&
-          prev !== undefined &&
-          prev !== 'AVAILABLE' &&
-          r.status === 'AVAILABLE'
-        ) {
+        if (key.notify && prev !== undefined && prev !== 'AVAILABLE' && r.status === 'AVAILABLE') {
           vacancies.push({ statId: key.statId, chgerId: key.chgerId });
         }
         lastStatus.set(k, r.status);
       }
 
+      // 변화가 있을 때만 내려보낸다.
       if (vacancies.length > 0) {
-        // 알림 푸시에도 data를 실어 앱이 위젯까지 함께 갱신한다.
         await sendVacancyPush(sub.token, vacancies);
         lastSyncPushAt.set(sub.token, nowMs);
       } else if (changed && sub.silentSync) {
@@ -317,12 +324,14 @@ function handleSendError(token: string, e: any): void {
 }
 
 let pollTimer: NodeJS.Timeout | null = null;
-/** 15초 tick으로 돌며 구독별 간격(최소 30초)을 지킨다. */
+/** 5초 tick으로 돌며 구독별 다음 조회 시점(30~60초 무작위)을 지킨다. */
 export function startAlertPolling(): void {
   if (pollTimer) return;
   ensureMessaging(); // 초기화 시도(로그)
   pollTimer = setInterval(() => {
     pollAndNotify().catch((e) => console.warn('[Alert] poll cycle error:', e));
   }, TICK_MS);
-  console.log(`[Alert] polling started (${TICK_MS / 1000}s tick, min interval ${MIN_INTERVAL_SEC}s)`);
+  console.log(
+    `[Alert] polling started (${TICK_MS / 1000}s tick, ${MIN_INTERVAL_SEC}~${MAX_INTERVAL_SEC}s randomized per subscription, alert-on only)`
+  );
 }
