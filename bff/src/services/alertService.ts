@@ -68,6 +68,21 @@ const nextPollAt = new Map<string, number>();
 const lastSyncPushAt = new Map<string, number>();
 const SYNC_PUSH_MIN_GAP_MS = 20_000;
 
+/** 운영 점검용 카운터 (GET /v1/alerts/stats 로 노출). */
+const diag = {
+  startedAt: new Date().toISOString(),
+  pollCycles: 0,        // tick 실행 횟수
+  pollsRun: 0,          // 실제 상태 조회 횟수
+  pollErrors: 0,
+  lastPollAt: null as string | null,
+  vacancyPushes: 0,
+  syncPushes: 0,
+  pushErrors: 0,
+  staleTokensRemoved: 0,
+  lastPushAt: null as string | null,
+  lastError: null as string | null,
+};
+
 // ---- 영속 ----------------------------------------------------------------
 function normalizeSub(raw: any): AlertSubscription {
   const keys: WatchKey[] = Array.isArray(raw?.keys)
@@ -172,6 +187,14 @@ export function removeSubscription(token: string): void {
   persistSubs();
 }
 
+export function alertDiagnostics() {
+  return {
+    ...diag,
+    firebaseReady: ensureMessaging() !== null,
+    alertsFile: ALERTS_FILE,
+  };
+}
+
 export function subscriptionStats() {
   let notifyKeys = 0;
   let watchKeys = 0;
@@ -199,6 +222,7 @@ function inWindow(startMin: number, endMin: number, now: number): boolean {
 
 // ---- 폴링 & 알림 ---------------------------------------------------------
 export async function pollAndNotify(): Promise<void> {
+  diag.pollCycles += 1;
   if (subscriptions.size === 0) return;
   const now = nowLocalMinutes();
   const nowMs = Date.now();
@@ -217,6 +241,9 @@ export async function pollAndNotify(): Promise<void> {
     const due = nextPollAt.get(sub.token);
     if (due !== undefined && nowMs < due) continue;
     nextPollAt.set(sub.token, nowMs + nextDelayMs());
+
+    diag.pollsRun += 1;
+    diag.lastPollAt = new Date().toISOString();
 
     try {
       // 캐시 나이를 최소 간격의 절반으로 제한해 준실시간을 보장한다.
@@ -252,7 +279,9 @@ export async function pollAndNotify(): Promise<void> {
           await sendWidgetSyncPush(sub.token);
         }
       }
-    } catch (e) {
+    } catch (e: any) {
+      diag.pollErrors += 1;
+      diag.lastError = `poll: ${e?.message || String(e)}`;
       console.warn(`[Alert] poll failed for token ${sub.token.slice(0, 8)}…:`, e);
     }
   }
@@ -292,6 +321,8 @@ async function sendVacancyPush(
         body,
       },
     });
+    diag.vacancyPushes += 1;
+    diag.lastPushAt = new Date().toISOString();
     console.log(`[Alert] pushed to ${token.slice(0, 8)}…: ${body}`);
   } catch (e: any) {
     handleSendError(token, e);
@@ -308,6 +339,8 @@ async function sendWidgetSyncPush(token: string): Promise<void> {
       android: { priority: 'high' },
       data: { type: 'widget_sync', at: String(Date.now()) },
     });
+    diag.syncPushes += 1;
+    diag.lastPushAt = new Date().toISOString();
     console.log(`[Alert] widget_sync pushed to ${token.slice(0, 8)}…`);
   } catch (e: any) {
     handleSendError(token, e);
@@ -315,10 +348,13 @@ async function sendWidgetSyncPush(token: string): Promise<void> {
 }
 
 function handleSendError(token: string, e: any): void {
-  // 토큰 만료/무효 시 구독 제거
+  diag.pushErrors += 1;
   const code = e?.errorInfo?.code || e?.code;
+  diag.lastError = `push: ${code || e?.message || String(e)}`;
+  // 토큰 만료/무효 시 구독 제거
   if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-argument') {
-    console.warn(`[Alert] stale token removed: ${token.slice(0, 8)}…`);
+    diag.staleTokensRemoved += 1;
+    console.warn(`[Alert] stale token removed: ${token.slice(0, 8)}… (${code})`);
     removeSubscription(token);
   } else {
     console.warn('[Alert] send failed:', e);

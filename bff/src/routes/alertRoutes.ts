@@ -3,6 +3,7 @@ import {
   upsertSubscription,
   removeSubscription,
   subscriptionStats,
+  alertDiagnostics,
   AlertSubscription,
   MIN_INTERVAL_SEC,
   MAX_INTERVAL_SEC,
@@ -80,6 +81,11 @@ alertRouter.post('/unsubscribe', (req: Request, res: Response) => {
 alertRouter.get('/stats', (_req: Request, res: Response) => {
   res.json({
     success: true,
-    data: { ...subscriptionStats(), pollMinSec: MIN_INTERVAL_SEC, pollMaxSec: MAX_INTERVAL_SEC },
+    data: {
+      ...subscriptionStats(),
+      pollMinSec: MIN_INTERVAL_SEC,
+      pollMaxSec: MAX_INTERVAL_SEC,
+      diagnostics: alertDiagnostics(),
+    },
   });
 });

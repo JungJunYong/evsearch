@@ -56,24 +56,31 @@ fun AppleGlobalNav(
     category: String,
     detail: String? = null,
     modifier: Modifier = Modifier,
+    /** 카테고리명 대신 놓을 컨트롤 (넓은 화면의 pane 전환 등). */
+    leading: (@Composable () -> Unit)? = null,
     actions: @Composable () -> Unit = {}
 ) {
     Column(modifier = modifier.fillMaxWidth().background(Apple.C.Black)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 52.dp)
-                .padding(horizontal = Apple.Sp.md, vertical = Apple.Sp.xs),
+                // 높이를 고정해 여러 pane을 나란히 놓아도 헤더 기준선이 어긋나지 않게 한다.
+                .height(NAV_HEIGHT)
+                .padding(horizontal = Apple.Sp.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = category,
-                    style = Apple.T.Tagline,
-                    color = Apple.C.Text,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                if (leading != null) {
+                    leading()
+                } else {
+                    Text(
+                        text = category,
+                        style = Apple.T.Tagline,
+                        color = Apple.C.Text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 if (detail != null) {
                     Text(
                         text = detail,
@@ -84,11 +91,15 @@ fun AppleGlobalNav(
                     )
                 }
             }
+            Spacer(Modifier.width(Apple.Sp.xs))
             Row(verticalAlignment = Alignment.CenterVertically) { actions() }
         }
         AppleHairline()
     }
 }
+
+/** 글로벌 내비 고정 높이. pane 간 헤더 정렬의 기준. */
+val NAV_HEIGHT = 60.dp
 
 @Composable
 fun AppleHairline(modifier: Modifier = Modifier) {

@@ -59,7 +59,9 @@ import com.evsearch.app.presentation.theme.Apple
 @Composable
 fun SavedChargersScreen(
     viewModel: SavedChargersViewModel,
-    onStationClick: (String) -> Unit
+    onStationClick: (String) -> Unit,
+    /** 넓은 화면에서 카테고리명 자리에 놓는 pane 전환 컨트롤 (없으면 카테고리명 표시). */
+    navLeading: (@Composable () -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -81,6 +83,7 @@ fun SavedChargersScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             AppleGlobalNav(
+                leading = navLeading,
                 category = "위젯",
                 detail = "${uiState.savedChargers.size}개 단말기 · 15분 주기 + 변화 시 즉시",
                 actions = {

@@ -69,7 +69,9 @@ import com.evsearch.app.presentation.theme.Apple
 @Composable
 fun FavoritesScreen(
     viewModel: FavoritesViewModel,
-    onStationClick: (String) -> Unit
+    onStationClick: (String) -> Unit,
+    /** 넓은 화면에서 카테고리명 자리에 놓는 pane 전환 컨트롤 (없으면 카테고리명 표시). */
+    navLeading: (@Composable () -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -90,6 +92,7 @@ fun FavoritesScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             AppleGlobalNav(
+                leading = navLeading,
                 category = "즐겨찾기",
                 detail = buildString {
                     append("${uiState.favorites.size}개 단말기")

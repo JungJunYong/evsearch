@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Search
@@ -192,13 +193,11 @@ fun FoldableAdaptiveAppNavigation(
                             onBackClick = { selectedStatId = null }
                         )
                     } else {
-                        Column(modifier = Modifier.fillMaxSize()) {
+                        // 두 pane의 헤더 높이를 맞추기 위해 pane 전환 컨트롤을 내비 안에 넣는다.
+                        val paneSwitch: @Composable () -> Unit = {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Apple.C.Black)
-                                    .padding(horizontal = Apple.Sp.md, vertical = Apple.Sp.xs),
-                                horizontalArrangement = Arrangement.spacedBy(Apple.Sp.xs)
+                                horizontalArrangement = Arrangement.spacedBy(Apple.Sp.xxs),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 ApplePillButton(
                                     text = "즐겨찾기",
@@ -213,18 +212,20 @@ fun FoldableAdaptiveAppNavigation(
                                     onClick = { rightPaneTab = TAB_WIDGET }
                                 )
                             }
-                            AppleHairline()
-                            if (rightPaneTab == TAB_WIDGET) {
-                                SavedChargersScreen(
-                                    viewModel = savedViewModel,
-                                    onStationClick = { statId -> selectedStatId = statId }
-                                )
-                            } else {
-                                FavoritesScreen(
-                                    viewModel = favoritesViewModel,
-                                    onStationClick = { statId -> selectedStatId = statId }
-                                )
-                            }
+                        }
+
+                        if (rightPaneTab == TAB_WIDGET) {
+                            SavedChargersScreen(
+                                viewModel = savedViewModel,
+                                onStationClick = { statId -> selectedStatId = statId },
+                                navLeading = paneSwitch
+                            )
+                        } else {
+                            FavoritesScreen(
+                                viewModel = favoritesViewModel,
+                                onStationClick = { statId -> selectedStatId = statId },
+                                navLeading = paneSwitch
+                            )
                         }
                     }
                 }
