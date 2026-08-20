@@ -2,6 +2,9 @@ package com.evsearch.app.presentation.saved
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -106,6 +109,8 @@ fun SavedChargersScreen(
             )
         }
     ) { padding ->
+        // 하단 제스처 바/내비게이션 바에 마지막 줄이 가리지 않도록 인셋만큼 더 띄운다.
+        val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -121,7 +126,7 @@ fun SavedChargersScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
                         start = Apple.Sp.md, end = Apple.Sp.md,
-                        top = Apple.Sp.lg, bottom = Apple.Sp.xl
+                        top = Apple.Sp.lg, bottom = Apple.Sp.xl + bottomInset
                     ),
                     verticalArrangement = Arrangement.spacedBy(Apple.Sp.sm)
                 ) {

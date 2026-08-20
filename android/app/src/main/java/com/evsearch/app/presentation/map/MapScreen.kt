@@ -64,6 +64,8 @@ import com.evsearch.app.presentation.common.AppleHairline
 import com.evsearch.app.presentation.common.ApplePillButton
 import com.evsearch.app.presentation.common.AppleTile
 import com.evsearch.app.presentation.common.PillStyle
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import com.evsearch.app.presentation.theme.Apple
 import com.evsearch.app.presentation.map.components.KakaoMapView
 
@@ -223,6 +225,8 @@ fun MapScreen(
             )
         }
     ) { paddingValues ->
+        val bottomInset = androidx.compose.foundation.layout.WindowInsets.navigationBars
+            .asPaddingValues().calculateBottomPadding()
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -472,9 +476,11 @@ fun MapScreen(
                 }
                 else -> {
                     LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        // 마지막 카드가 하단 탭바 경계에서 잘린 채 멈추지 않도록 여백을 준다.
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            start = 16.dp, end = 16.dp, bottom = Apple.Sp.xl + bottomInset
+                        ),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(visibleStations) { station ->

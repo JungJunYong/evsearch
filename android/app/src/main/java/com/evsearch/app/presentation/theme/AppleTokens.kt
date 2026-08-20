@@ -14,6 +14,8 @@ import androidx.compose.ui.unit.sp
  * - 인터랙션 색은 단 하나(SkyBlue #2997ff). 상태 의미색은 상태 라벨/도트에만 쓴다.
  * - 그림자 금지. 깊이는 '타일 표면색 변화'와 1px 헤어라인으로만 만든다.
  * - 디스플레이 크기(17sp 이상)에는 음수 자간, 본문은 17sp/1.47.
+ * - lineHeight는 지침의 라틴 기준(1.07~1.19)보다 살짝 넉넉하게 잡는다. 한글은 디센더가
+ *   깊어 그 값에서는 글자가 잘린다.
  * - 굵기 사다리는 300 / 400 / 600 / 700. 500은 쓰지 않는다.
  */
 object Apple {
@@ -58,22 +60,22 @@ object Apple {
         /** 히어로 헤드라인 (폰 기준 28sp) */
         val HeroDisplay = TextStyle(
             fontSize = 28.sp, fontWeight = FontWeight.SemiBold,
-            lineHeight = 30.sp, letterSpacing = (-0.5).sp
+            lineHeight = 36.sp, letterSpacing = (-0.5).sp
         )
         /** 타일 헤드라인 */
         val DisplayLg = TextStyle(
             fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
-            lineHeight = 26.sp, letterSpacing = (-0.4).sp
+            lineHeight = 29.sp, letterSpacing = (-0.4).sp
         )
         /** 섹션 헤드 */
         val DisplayMd = TextStyle(
             fontSize = 19.sp, fontWeight = FontWeight.SemiBold,
-            lineHeight = 24.sp, letterSpacing = (-0.374).sp
+            lineHeight = 26.sp, letterSpacing = (-0.374).sp
         )
         /** 서브 타일 태그라인 / 카테고리명 */
         val Tagline = TextStyle(
             fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-            lineHeight = 21.sp, letterSpacing = 0.2.sp
+            lineHeight = 23.sp, letterSpacing = 0.2.sp
         )
         /** 에어리한 리드 문단 (rare weight 300) */
         val LeadAiry = TextStyle(
@@ -86,7 +88,7 @@ object Apple {
         )
         val BodyStrong = TextStyle(
             fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-            lineHeight = 21.sp, letterSpacing = (-0.374).sp
+            lineHeight = 23.sp, letterSpacing = (-0.374).sp
         )
         val Caption = TextStyle(
             fontSize = 14.sp, fontWeight = FontWeight.Normal,
@@ -94,20 +96,20 @@ object Apple {
         )
         val CaptionStrong = TextStyle(
             fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-            lineHeight = 18.sp, letterSpacing = (-0.224).sp
+            lineHeight = 19.sp, letterSpacing = (-0.224).sp
         )
         val FinePrint = TextStyle(
             fontSize = 12.sp, fontWeight = FontWeight.Normal,
-            lineHeight = 16.sp, letterSpacing = (-0.12).sp
+            lineHeight = 17.sp, letterSpacing = (-0.12).sp
         )
         val MicroLegal = TextStyle(
             fontSize = 10.sp, fontWeight = FontWeight.Normal,
-            lineHeight = 13.sp, letterSpacing = (-0.08).sp
+            lineHeight = 15.sp, letterSpacing = (-0.08).sp
         )
         /** 내비 링크 */
         val NavLink = TextStyle(
             fontSize = 12.sp, fontWeight = FontWeight.Normal,
-            lineHeight = 14.sp, letterSpacing = (-0.12).sp
+            lineHeight = 16.sp, letterSpacing = (-0.12).sp
         )
     }
 

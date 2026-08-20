@@ -69,10 +69,26 @@ fun AppleGlobalNav(
                 .padding(horizontal = Apple.Sp.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                if (leading != null) {
+            if (leading != null) {
+                // 컨트롤이 들어오면 한 줄로 배치한다(두 줄이면 고정 높이 안에서 잘린다).
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     leading()
-                } else {
+                    if (detail != null) {
+                        Spacer(Modifier.width(Apple.Sp.xs))
+                        Text(
+                            text = detail,
+                            style = Apple.T.FinePrint,
+                            color = Apple.C.TextFaint,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            } else {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = category,
                         style = Apple.T.Tagline,
@@ -80,15 +96,15 @@ fun AppleGlobalNav(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                }
-                if (detail != null) {
-                    Text(
-                        text = detail,
-                        style = Apple.T.FinePrint,
-                        color = Apple.C.TextFaint,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    if (detail != null) {
+                        Text(
+                            text = detail,
+                            style = Apple.T.FinePrint,
+                            color = Apple.C.TextFaint,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
             Spacer(Modifier.width(Apple.Sp.xs))
